@@ -56,8 +56,13 @@ def detect_association(approved_path: Path) -> dict:
     }
 
 
+_MIN_ROW_COLUMNS = max(_COL_ADMIN_NAME, _COL_DIRECTORATE_NAME, _COL_ASSOC_NAME, _COL_SECTOR) + 1
+
+
 def _get_row(ws, row_number: int) -> tuple:
     for row in ws.iter_rows(min_row=row_number, max_row=row_number, values_only=True):
+        if len(row) < _MIN_ROW_COLUMNS:
+            row = row + (None,) * (_MIN_ROW_COLUMNS - len(row))
         return row
     raise DetectionError("ملف المعتمد لا يحتوي على صفوف كافية لقراءة بيانات الجمعية")
 

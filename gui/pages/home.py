@@ -71,7 +71,7 @@ class HomePage(ctk.CTkFrame):
         city_name = info["association_name"].split("-")[0].strip()
         today = date.today().isoformat()
         base_dir = theme.OUTPUT_BASE_DIRS.get(info["association_type"], approved_path.parent)
-        suggested = base_dir / f"{city_name}_{today}.xlsx"
+        suggested = base_dir / f"{city_name}_مدمج_{today}.xlsx"
         self._output_picker.set_path(suggested)
 
     def _handle_start(self) -> None:

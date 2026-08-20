@@ -12,6 +12,14 @@ def setup_sheet(ws: Worksheet) -> None:
     ws.sheet_view.rightToLeft = True
     ws.freeze_panes = "A2"
     ws.row_dimensions[1].height = styles.HEADER_ROW_HEIGHT
+    _apply_column_widths(ws)
+
+
+def _apply_column_widths(ws: Worksheet) -> None:
+    for col_idx, (key, _label, _group) in enumerate(styles.COLUMNS, start=1):
+        width = styles.COLUMN_WIDTHS.get(key)
+        if width is not None:
+            ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = width
 
 
 def write_header(ws: Worksheet) -> None:

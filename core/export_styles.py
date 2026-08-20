@@ -45,6 +45,31 @@ COLUMNS: list[tuple[str, str, str]] = [
 ]
 
 BORDER_COLUMN_KEYS = {"border_north", "border_west", "border_south", "border_east"}
+
+COLUMN_WIDTHS: dict[str, float] = {
+    "directorate": 14,
+    "administration": 12,
+    "association_name": 26,
+    "association_type_label": 14,
+    "association_code": 12,
+    "basin_name": 16,
+    "basin_code": 22,
+    "holding_number": 12,
+    "unified_holding_id": 26,
+    "registry_page": 10,
+    "national_id": 16,
+    "holder_name": 26,
+    "parcel_count_in_holding": 10,
+    "land_number": 12,
+    "area_feddan": 10,
+    "area_qirat": 10,
+    "area_sahm": 10,
+    "area_m2": 18,
+    "border_north": 20,
+    "border_west": 20,
+    "border_south": 20,
+    "border_east": 20,
+}
 NUMBER_FORMAT_QUANTITY = "#,##0.###"
 NUMBER_FORMAT_M2 = '#,##0.00 "م²"'
 

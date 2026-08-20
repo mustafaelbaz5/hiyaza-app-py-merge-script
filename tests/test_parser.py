@@ -111,3 +111,34 @@ def test_parse_approved_basic(tmp_path):
     df = parse_approved(path)
     assert len(df) == 2
     assert set(df["holding_number"]) == {"48", "49"}
+
+
+def test_parse_registered_handles_short_trailing_row(tmp_path):
+    """openpyxl trims trailing empty cells from a row's tuple when the last
+    populated cell in that row is earlier than the sheet's overall last
+    column — fixed-index lookups must not raise IndexError on such rows."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for _ in range(10):
+        ws.append([None] * 23)
+    full_row = [None] * 23
+    full_row[4] = "11996268"
+    full_row[13] = "48"
+    full_row[14] = "شخص كامل"
+    full_row[18] = "basin_0"
+    full_row[19] = "شنشا-الائتمان الزراعي"
+    full_row[20] = "اجا"
+    full_row[21] = "الدقهليه"
+    ws.append(full_row)
+    # A row whose last non-empty cell is holding_number (index 13) — openpyxl
+    # will only materialize 14 cells for it, not the full 23.
+    short_row = [None] * 14
+    short_row[4] = "11996269"
+    short_row[13] = "49"
+    ws.append(short_row)
+    path = tmp_path / "registered.xlsx"
+    wb.save(path)
+
+    df = parse_registered(path)
+    assert "49" in df["holding_number"].values
+    assert len(df) == 2

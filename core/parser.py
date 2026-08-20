@@ -74,7 +74,7 @@ def _to_number(value) -> float:
         return 0.0
 
 
-def _read_rows(path: Path, start_row: int) -> list[tuple]:
+def _read_rows(path: Path, start_row: int, min_columns: int) -> list[tuple]:
     try:
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     except (FileNotFoundError, PermissionError) as e:
@@ -84,7 +84,16 @@ def _read_rows(path: Path, start_row: int) -> list[tuple]:
         raise ParseError(f"حدث خطأ غير متوقع أثناء قراءة الملف: {Path(path).name}") from e
 
     ws = wb.active
-    return list(ws.iter_rows(min_row=start_row, values_only=True))
+    rows = ws.iter_rows(min_row=start_row, values_only=True)
+    return [_pad_row(row, min_columns) for row in rows]
+
+
+def _pad_row(row: tuple, min_length: int) -> tuple:
+    """openpyxl trims trailing empty cells from a row's tuple; pad it back
+    out so fixed-index column lookups never raise IndexError."""
+    if len(row) >= min_length:
+        return row
+    return row + (None,) * (min_length - len(row))
 
 
 def parse_registered(path: Path) -> pd.DataFrame:
@@ -95,7 +104,8 @@ def parse_registered(path: Path) -> pd.DataFrame:
     - Detects and removes summary rows (holding repeated across >=13 basins)
     - Normalizes holding numbers, fixes basin name typos
     """
-    rows = _read_rows(path, _REGISTERED_DATA_START_ROW)
+    min_columns = max(_REGISTERED_COLUMNS.values()) + 1
+    rows = _read_rows(path, _REGISTERED_DATA_START_ROW, min_columns)
     records = []
     for row in rows:
         holding_raw = row[_REGISTERED_COLUMNS["holding_number"]]
@@ -140,7 +150,8 @@ def parse_approved(path: Path) -> pd.DataFrame:
     - Data starts at row index 17 (0-based)
     - Normalizes holding numbers
     """
-    rows = _read_rows(path, _APPROVED_DATA_START_ROW)
+    min_columns = max(_APPROVED_COLUMNS.values()) + 1
+    rows = _read_rows(path, _APPROVED_DATA_START_ROW, min_columns)
     records = []
     for row in rows:
         holding_raw = row[_APPROVED_COLUMNS["holding_number"]]
