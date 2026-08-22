@@ -34,7 +34,7 @@ def build_exe():
             "--windowed",
             "--noconfirm",
             f"--distpath={DIST_DIR}",
-            f"--buildpath={BUILD_DIR}",
+            f"--workpath={BUILD_DIR}",
             f"--specpath={BASE_DIR}",
         ]
         + [f"--add-data={src};{dst}" for src, dst in data_files],
