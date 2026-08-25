@@ -15,21 +15,13 @@ def _join_key(holding_number: str, holder_name: str) -> str:
     return f"{holding_number}||{holder_name}"
 
 
-def _build_join_lookup(approved: pd.DataFrame) -> dict[str, dict]:
-    """join_key -> {feddan, qirat, sahm}. For duplicate keys, prefer the row
-    with non-zero area."""
-    lookup: dict[str, dict] = {}
+def _build_join_lookup(approved: pd.DataFrame) -> set[str]:
+    """Set of join_keys present in the approved file (for existence check only)."""
+    lookup: set[str] = set()
     for row in approved.itertuples():
         key = _join_key(row.holding_number, row.holder_name)
-        area = {"feddan": row.feddan, "qirat": row.qirat, "sahm": row.sahm}
-        existing = lookup.get(key)
-        if existing is None or _is_zero_area(existing):
-            lookup[key] = area
+        lookup.add(key)
     return lookup
-
-
-def _is_zero_area(area: dict) -> bool:
-    return area["feddan"] == 0 and area["qirat"] == 0 and area["sahm"] == 0
 
 
 def _build_holding_lookup(approved: pd.DataFrame) -> dict[str, dict]:
@@ -56,8 +48,9 @@ def merge(
     """
     Join strategy: primary key = normalize(holding_number) + "||" + holder_name.
     Falls back to holding_number only when the combined key has no match.
-    Area comes from the approved file; holding-level fields (national id,
-    unified id, parcel count) come from the first approved row per holding.
+    Area ALWAYS comes from the registered file (individual parcel area).
+    Holding-level fields (national id, unified id, parcel count) come from
+    the first approved row per holding.
     """
     join_lookup = _build_join_lookup(approved)
     holding_lookup = _build_holding_lookup(approved)
@@ -69,16 +62,15 @@ def merge(
 
     for row in registered.itertuples():
         key = _join_key(row.holding_number, row.holder_name)
-        area = join_lookup.get(key)
-        if area is None:
+        matched = key in join_lookup
+        if not matched:
             unmatched_count += 1
-            area = _fallback_area(join_lookup, row.holding_number)
-            if area is None:
+            fallback_matched = _fallback_exists(join_lookup, row.holding_number)
+            if not fallback_matched:
                 warnings.append(
-                    f"لم يتم العثور على مساحة للحيازة {row.holding_number} "
+                    f"لم يتم العثور على بيانات الحائز للحيازة {row.holding_number} "
                     f"({row.holder_name})"
                 )
-                area = {"feddan": 0.0, "qirat": 0.0, "sahm": 0.0}
 
         holding_fields = holding_lookup.get(
             row.holding_number,
@@ -104,10 +96,10 @@ def merge(
                 holder_name=row.holder_name,
                 parcel_count_in_holding=holding_fields["parcel_count"],
                 land_number=row.land_number,
-                area_feddan=area["feddan"],
-                area_qirat=area["qirat"],
-                area_sahm=area["sahm"],
-                area_m2=calculate_m2(area["feddan"], area["qirat"], area["sahm"]),
+                area_feddan=row.feddan,
+                area_qirat=row.qirat,
+                area_sahm=row.sahm,
+                area_m2=calculate_m2(row.feddan, row.qirat, row.sahm),
                 border_north=row.border_north,
                 border_west=row.border_west,
                 border_south=row.border_south,
@@ -127,10 +119,7 @@ def merge(
     )
 
 
-def _fallback_area(join_lookup: dict[str, dict], holding_number: str) -> dict | None:
-    """Fallback: match by holding_number only when the combined key fails."""
+def _fallback_exists(join_lookup: set[str], holding_number: str) -> bool:
+    """Check if any join_key for this holding_number exists in approved file."""
     suffix = f"{holding_number}||"
-    for key, area in join_lookup.items():
-        if key.startswith(suffix):
-            return area
-    return None
+    return any(key.startswith(suffix) for key in join_lookup)

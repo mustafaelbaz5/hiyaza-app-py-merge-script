@@ -113,6 +113,9 @@ def parse_registered(path: Path) -> pd.DataFrame:
             continue
         records.append(
             {
+                "feddan": _to_number(row[_REGISTERED_COLUMNS["feddan"]]),
+                "qirat": _to_number(row[_REGISTERED_COLUMNS["qirat"]]),
+                "sahm": _to_number(row[_REGISTERED_COLUMNS["sahm"]]),
                 "holding_number": normalize_holding(holding_raw),
                 "holder_name": _clean(row[_REGISTERED_COLUMNS["holder_name"]]),
                 "land_number": _clean(row[_REGISTERED_COLUMNS["land_number"]]),

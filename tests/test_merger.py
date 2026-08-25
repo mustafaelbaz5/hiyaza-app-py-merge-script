@@ -11,8 +11,11 @@ def _make_association_info(codes_files) -> AssociationInfo:
 
 
 def _registered_df(rows):
-    """rows: list of dict with holding_number, holder_name, basin_name."""
+    """rows: list of dict with holding_number, holder_name, basin_name, area fields."""
     defaults = {
+        "feddan": 0.0,
+        "qirat": 0.0,
+        "sahm": 0.0,
         "land_number": "12345678",
         "registry_page": "1",
         "association_name": "شنشا-الائتمان الزراعي",
@@ -44,16 +47,25 @@ def test_full_match_by_holding_and_name(codes_files):
     db = CodesDB(*codes_files)
 
     registered = _registered_df(
-        [{"holding_number": "48", "holder_name": "احمد محمد", "basin_name": "الدماسه"}]
+        [
+            {
+                "holding_number": "48",
+                "holder_name": "احمد محمد",
+                "basin_name": "الدماسه",
+                "feddan": 1.0,
+                "qirat": 2.0,
+                "sahm": 3.0,
+            }
+        ]
     )
     approved = _approved_df(
         [
             {
                 "holding_number": "48",
                 "holder_name": "احمد محمد",
-                "feddan": 1.0,
-                "qirat": 2.0,
-                "sahm": 3.0,
+                "feddan": 10.0,  # Different from registered (should be ignored)
+                "qirat": 20.0,
+                "sahm": 30.0,
             }
         ]
     )
@@ -62,7 +74,9 @@ def test_full_match_by_holding_and_name(codes_files):
     assert result.unmatched_count == 0
     assert len(result.parcels) == 1
     parcel = result.parcels[0]
-    assert parcel.area_feddan == 1.0
+    assert parcel.area_feddan == 1.0  # From registered, NOT approved
+    assert parcel.area_qirat == 2.0
+    assert parcel.area_sahm == 3.0
     assert parcel.national_id == "12345678901234"
     assert parcel.unified_holding_id == "06-3230-00323925-000001"
 
@@ -102,26 +116,46 @@ def test_parcel_count_matches_registered_input(codes_files):
     assert len(result.parcels) == len(registered)
 
 
-def test_ambiguous_holding_uses_name_to_disambiguate(codes_files):
-    """Same holding_number shared by two different holders in a joint holding —
-    each row must get its own area, not a blended/incorrect one."""
+def test_multiple_parcels_same_holding_get_individual_areas(codes_files):
+    """Multiple parcels from registered file for same holding get their own
+    individual areas from registered, NOT the person's total from approved."""
     info = _make_association_info(codes_files)
     db = CodesDB(*codes_files)
 
     registered = _registered_df(
         [
-            {"holding_number": "5", "holder_name": "شخص اول", "basin_name": "الدماسه"},
-            {"holding_number": "5", "holder_name": "شخص ثاني", "basin_name": "الدماسه"},
+            {
+                "holding_number": "5",
+                "holder_name": "شخص",
+                "basin_name": "الدماسه",
+                "feddan": 5.0,
+            },
+            {
+                "holding_number": "5",
+                "holder_name": "شخص",
+                "basin_name": "الدماسه",
+                "feddan": 4.0,
+            },
+            {
+                "holding_number": "5",
+                "holder_name": "شخص",
+                "basin_name": "الدماسه",
+                "feddan": 6.0,
+            },
         ]
     )
     approved = _approved_df(
         [
-            {"holding_number": "5", "holder_name": "شخص اول", "feddan": 1.0},
-            {"holding_number": "5", "holder_name": "شخص ثاني", "feddan": 2.0},
+            {
+                "holding_number": "5",
+                "holder_name": "شخص",
+                "feddan": 15.0,  # Person's total area for all 3 parcels
+            }
         ]
     )
 
     result = merge(registered, approved, db, info)
-    by_name = {p.holder_name: p.area_feddan for p in result.parcels}
-    assert by_name["شخص اول"] == 1.0
-    assert by_name["شخص ثاني"] == 2.0
+    assert len(result.parcels) == 3
+    areas = [p.area_feddan for p in result.parcels]
+    assert areas == [5.0, 4.0, 6.0]  # From registered, NOT [15, 15, 15]
+    assert sum(areas) == 15.0  # Sum matches approved person's total (but distributed correctly)
