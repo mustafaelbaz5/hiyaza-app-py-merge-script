@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['D:\\WORK\\hiyaza_work\\app_data_merge_script\\main.py'],
+    ['D:\\WORK\\python_projects\\app_data_merge_script\\main.py'],
     pathex=[],
     binaries=[],
-    datas=[('D:\\WORK\\hiyaza_work\\app_data_merge_script\\data', 'data')],
+    datas=[('D:\\WORK\\python_projects\\app_data_merge_script\\data', 'data')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
