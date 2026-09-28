@@ -7,12 +7,13 @@ import pandas as pd
 from core.area import calculate_m2
 from core.codes import CodesDB
 from core.models import AssociationInfo, MergeResult, Parcel
+from core.parser import normalize_holder_name
 
 logger = logging.getLogger(__name__)
 
 
 def _join_key(holding_number: str, holder_name: str) -> str:
-    return f"{holding_number}||{holder_name}"
+    return f"{holding_number}||{normalize_holder_name(holder_name)}"
 
 
 def _build_join_lookup(approved: pd.DataFrame) -> set[str]:
@@ -24,19 +25,39 @@ def _build_join_lookup(approved: pd.DataFrame) -> set[str]:
     return lookup
 
 
-def _build_holding_lookup(approved: pd.DataFrame) -> dict[str, dict]:
-    """normalized_holding -> {national_id, unified_holding_id, parcel_count}
-    (first occurrence per holding)."""
-    lookup: dict[str, dict] = {}
+UNKNOWN_NATIONAL_ID = "11111111111111"
+
+
+def _build_person_lookup(approved: pd.DataFrame) -> tuple[dict[tuple[str, str], dict], dict[tuple[str, tuple[str, ...]], list[dict]]]:
+    """Return exact and first-four-name approved lookups."""
+    lookup: dict[tuple[str, str], dict] = {}
+    prefix_lookup: dict[tuple[str, tuple[str, ...]], list[dict]] = {}
     for row in approved.itertuples():
-        if row.holding_number in lookup:
-            continue
-        lookup[row.holding_number] = {
+        normalized_name = normalize_holder_name(row.holder_name)
+        key = (row.holding_number, normalized_name)
+        words = tuple(normalized_name.split())
+        prefix_key = (row.holding_number, words[:4]) if len(words) >= 4 else None
+        fields = {
             "national_id": row.national_id,
             "unified_holding_id": row.unified_holding_id,
             "parcel_count": row.parcel_count,
+            "approved_holder_name": row.holder_name,
         }
-    return lookup
+        if key in lookup:
+            if lookup[key]["national_id"] != row.national_id:
+                # The source contains conflicting records for the same person.
+                # Do not stop the whole merge or choose one ID silently.
+                logger.warning(
+                    "Conflicting national IDs for the same holding and holder: %s / %s",
+                    row.holding_number,
+                    row.holder_name,
+                )
+                lookup[key]["national_id"] = UNKNOWN_NATIONAL_ID
+            continue
+        lookup[key] = fields
+        if prefix_key is not None:
+            prefix_lookup.setdefault(prefix_key, []).append(fields)
+    return lookup, prefix_lookup
 
 
 def merge(
@@ -47,13 +68,13 @@ def merge(
 ) -> MergeResult:
     """
     Join strategy: primary key = normalize(holding_number) + "||" + holder_name.
-    Falls back to holding_number only when the combined key has no match.
+    Person-level fields are looked up by the same combined key.
     Area ALWAYS comes from the registered file (individual parcel area).
-    Holding-level fields (national id, unified id, parcel count) come from
-    the first approved row per holding.
+    If the combined key is missing, the national ID is set to the configured
+    unknown marker instead of borrowing another person's data.
     """
     join_lookup = _build_join_lookup(approved)
-    holding_lookup = _build_holding_lookup(approved)
+    person_lookup, prefix_lookup = _build_person_lookup(approved)
     basins = codes_db.get_basins(association_info.code, association_info.type)
 
     warnings: list[str] = []
@@ -65,17 +86,30 @@ def merge(
         matched = key in join_lookup
         if not matched:
             unmatched_count += 1
-            fallback_matched = _fallback_exists(join_lookup, row.holding_number)
-            if not fallback_matched:
-                warnings.append(
-                    f"لم يتم العثور على بيانات الحائز للحيازة {row.holding_number} "
-                    f"({row.holder_name})"
-                )
+            warnings.append(
+                f"لم يتم العثور على بيانات الحائز للحيازة {row.holding_number} "
+                f"({row.holder_name})"
+            )
 
-        holding_fields = holding_lookup.get(
-            row.holding_number,
-            {"national_id": "", "unified_holding_id": "", "parcel_count": 0},
-        )
+        normalized_name = normalize_holder_name(row.holder_name)
+        prefix_candidates = []
+        person_fields = person_lookup.get((row.holding_number, normalized_name))
+        if person_fields is None:
+            words = tuple(normalized_name.split())
+            prefix_candidates = prefix_lookup.get((row.holding_number, words[:4]), []) if len(words) >= 4 else []
+            if len(prefix_candidates) == 1:
+                person_fields = prefix_candidates[0]
+            else:
+                person_fields = {
+                    "national_id": UNKNOWN_NATIONAL_ID,
+                    "unified_holding_id": "",
+                    "parcel_count": 0,
+                    "approved_holder_name": "",
+                }
+        if not matched and len(prefix_candidates) == 1:
+            matched = True
+            unmatched_count -= 1
+            warnings.pop()
         basin_code = codes_db.find_basin_code(
             row.basin_name, association_info.code, association_info.type
         )
@@ -90,11 +124,11 @@ def merge(
                 basin_name=row.basin_name,
                 basin_code=basin_code,
                 holding_number=row.holding_number,
-                unified_holding_id=holding_fields["unified_holding_id"],
+                unified_holding_id=person_fields["unified_holding_id"],
                 registry_page=row.registry_page,
-                national_id=holding_fields["national_id"],
-                holder_name=row.holder_name,
-                parcel_count_in_holding=holding_fields["parcel_count"],
+                national_id=person_fields["national_id"],
+                holder_name=person_fields["approved_holder_name"] or row.holder_name,
+                parcel_count_in_holding=person_fields["parcel_count"],
                 land_number=row.land_number,
                 area_feddan=row.feddan,
                 area_qirat=row.qirat,
@@ -119,7 +153,3 @@ def merge(
     )
 
 
-def _fallback_exists(join_lookup: set[str], holding_number: str) -> bool:
-    """Check if any join_key for this holding_number exists in approved file."""
-    suffix = f"{holding_number}||"
-    return any(key.startswith(suffix) for key in join_lookup)

@@ -51,11 +51,17 @@ _APPROVED_COLUMNS = {
 
 
 def normalize_holding(value) -> str:
-    """'0048', '048', '48' → '48'. Handles NaN/non-numeric gracefully."""
-    try:
-        return str(int(float(str(value).strip())))
-    except (ValueError, TypeError):
-        return str(value).strip()
+    """Return the holding number as text without changing its representation.
+
+    Preserve leading zeros in text cells (``0048``, ``048``), including
+    values such as ``0`` and ``00``. Numeric Excel cells are converted to
+    natural text because Excel has already discarded leading zeros.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
 
 
 def _normalize_basin_name(name) -> str:
@@ -65,6 +71,22 @@ def _normalize_basin_name(name) -> str:
 
 def _clean(value) -> str:
     return str(value).strip() if value is not None else ""
+
+
+def normalize_holder_name(value) -> str:
+    """Normalize harmless Arabic spelling variants for matching only."""
+    name = _clean(value)
+    replacements = str.maketrans({
+        "أ": "ا",
+        "إ": "ا",
+        "آ": "ا",
+        "ى": "ي",
+        "ة": "ه",
+        "ؤ": "و",
+        "ئ": "ي",
+    })
+    name = name.translate(replacements)
+    return " ".join(name.split())
 
 
 def _to_number(value) -> float:

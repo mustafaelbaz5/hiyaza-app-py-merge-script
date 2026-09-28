@@ -1,6 +1,6 @@
 import openpyxl
 
-from core.parser import normalize_holding, parse_approved, parse_registered
+from core.parser import normalize_holder_name, normalize_holding, parse_approved, parse_registered
 
 
 def _write_registered(path, rows):
@@ -50,15 +50,22 @@ def _write_approved(path, rows):
     wb.save(path)
 
 
-def test_normalize_holding_strips_leading_zeros():
-    assert normalize_holding("0048") == "48"
-    assert normalize_holding("048") == "48"
+def test_normalize_holding_preserves_leading_zeros():
+    assert normalize_holding("0048") == "0048"
+    assert normalize_holding("048") == "048"
     assert normalize_holding("48") == "48"
+    assert normalize_holding("0") == "0"
+    assert normalize_holding("00") == "00"
 
 
 def test_normalize_holding_handles_non_numeric():
     assert normalize_holding("nan") == "nan"
-    assert normalize_holding(None) == "None"
+    assert normalize_holding(None) == ""
+
+
+def test_normalize_holder_name_handles_arabic_spelling_variants():
+    assert normalize_holder_name("  محمد علي  ") == normalize_holder_name("محمد على")
+    assert normalize_holder_name("فاطمة") == normalize_holder_name("فاطمه")
 
 
 def test_summary_row_removed_when_repeated_across_many_basins(tmp_path):

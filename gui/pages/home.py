@@ -69,9 +69,14 @@ class HomePage(ctk.CTkFrame):
 
     def _suggest_output_path(self, approved_path: Path, info: dict) -> None:
         city_name = info["association_name"].split("-")[0].strip()
+        association_type_name = {
+            "credit": "\u0627\u0626\u062a\u0645\u0627\u0646",
+            "reform": "\u0627\u0635\u0644\u0627\u062d",
+        }.get(info["association_type"], info["association_type"])
         today = date.today().isoformat()
         base_dir = theme.OUTPUT_BASE_DIRS.get(info["association_type"], approved_path.parent)
         suggested = base_dir / f"{city_name}_مدمج_{today}.xlsx"
+        suggested = base_dir / f"{city_name}_\u0645\u062f\u0645\u062c_{association_type_name}_{today}.xlsx"
         self._output_picker.set_path(suggested)
 
     def _handle_start(self) -> None:
