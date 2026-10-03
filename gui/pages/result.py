@@ -8,9 +8,9 @@ from pathlib import Path
 
 import customtkinter as ctk
 
-from core.merger import UNKNOWN_NATIONAL_ID, is_valid_national_id
 from gui import theme
 from gui.widgets.progress_bar import LabeledProgressBar
+from gui.widgets.review_table import ReviewTable
 
 
 class ResultPage(ctk.CTkScrollableFrame):
@@ -19,7 +19,6 @@ class ResultPage(ctk.CTkScrollableFrame):
         self._on_new_merge = on_new_merge
         self._on_save_manual_ids: Callable[[dict[int, str]], None] | None = None
         self._output_path: Path | None = None
-        self._entries: dict[int, ctk.CTkEntry] = {}
         self.grid_columnconfigure(0, weight=1)
         self._build_layout()
 
@@ -33,16 +32,25 @@ class ResultPage(ctk.CTkScrollableFrame):
         self._progress.grid(row=2, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_S)
         self._summary = ctk.CTkLabel(self, text="", font=theme.FONT_BODY, anchor="e", justify="right")
         self._summary.grid(row=3, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_S)
-        self._log_toggle = ctk.CTkButton(self, text="إظهار سجل العمليات", command=self._toggle_log, fg_color="transparent", text_color=theme.PRIMARY_700)
+        self._build_log()
+        self._review = ReviewTable(self, on_status=self.show_message)
+        self._build_actions()
+
+    def _build_log(self) -> None:
+        self._log_toggle = ctk.CTkButton(
+            self, text="إظهار سجل العمليات", command=self._toggle_log,
+            fg_color="transparent", text_color=theme.PRIMARY_700,
+        )
         self._log_toggle.grid(row=4, column=0, sticky="e", padx=theme.PAD_L, pady=(0, theme.PAD_XS))
         self._log = ctk.CTkTextbox(self, height=120, font=theme.FONT_SMALL, state="disabled")
-        self._review = ctk.CTkFrame(self, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_CARD)
-        self._actions = ctk.CTkFrame(self, fg_color="transparent")
-        self._actions.grid(row=7, column=0, sticky="ew", padx=theme.PAD_L, pady=(theme.PAD_M, theme.PAD_XL))
-        self._actions.grid_columnconfigure(0, weight=1)
-        self._save = ctk.CTkButton(self._actions, text="حفظ الأرقام القومية المدخلة", command=self._save_manual_ids, state="disabled")
+
+    def _build_actions(self) -> None:
+        actions = ctk.CTkFrame(self, fg_color="transparent")
+        actions.grid(row=7, column=0, sticky="ew", padx=theme.PAD_L, pady=(theme.PAD_M, theme.PAD_XL))
+        actions.grid_columnconfigure(0, weight=1)
+        self._save = ctk.CTkButton(actions, text="حفظ الأرقام القومية المدخلة", command=self._save_manual_ids, state="disabled")
         self._save.grid(row=0, column=0, sticky="ew")
-        buttons = ctk.CTkFrame(self._actions, fg_color="transparent")
+        buttons = ctk.CTkFrame(actions, fg_color="transparent")
         buttons.grid(row=1, column=0, sticky="e", pady=(theme.PAD_S, 0))
         self._open = ctk.CTkButton(buttons, text="فتح ملف الناتج", command=self._open_output, state="disabled")
         self._open.grid(row=0, column=0, padx=(0, theme.PAD_S))
@@ -50,17 +58,17 @@ class ResultPage(ctk.CTkScrollableFrame):
 
     def reset(self) -> None:
         self._progress.reset()
-        self._message.configure(text="", text_color=theme.NEUTRAL_700)
         self._summary.configure(text="")
         self._output_path = None
         self._on_save_manual_ids = None
-        self._entries = {}
+        self._review.clear()
         self._review.grid_forget()
         self._log.grid_forget()
         self._log_toggle.configure(text="إظهار سجل العمليات")
         self._open.configure(state="disabled")
         self._save.configure(state="disabled")
-        self._set_log("")
+        self._replace_log("")
+        self.show_message("", theme.NEUTRAL_700)
 
     def update_progress(self, fraction: float, message: str) -> None:
         self._progress.update_progress(fraction, message)
@@ -76,17 +84,20 @@ class ResultPage(ctk.CTkScrollableFrame):
         self._output_path = summary["output_path"]
         self._on_save_manual_ids = on_save_manual_ids
         parcels = summary["result"].parcels
-        review_count = sum(parcel.national_id == UNKNOWN_NATIONAL_ID for parcel in parcels)
-        match_rate = self._match_rate(summary)
-        self._summary.configure(text=(f"إجمالي القطع: {summary['parcel_count']}  |  الأحواض: {summary['basin_count']}\nنسبة الربط: {match_rate:.0f}%  |  تحتاج مراجعة: {review_count}"))
+        self._summary.configure(text=self._summary_text(summary, parcels))
+        self._review.set_parcels(parcels)
+        if self._review.has_items:
+            self._review.grid(row=5, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_M)
+            self._save.configure(state="normal")
         self.show_message("اكتمل الدمج. راجع الحالات اليدوية إن وُجدت ثم احفظ.", theme.SUCCESS)
-        self._render_review_table(parcels)
         self._open.configure(state="normal")
 
     def refresh_review_table(self, parcels, applied: int) -> None:
-        self._render_review_table(parcels)
-        remaining = sum(parcel.national_id == UNKNOWN_NATIONAL_ID for parcel in parcels)
-        self.show_message(f"تم حفظ {applied} رقم قومي يدويًا. المتبقي للمراجعة: {remaining}.", theme.SUCCESS)
+        self._review.set_parcels(parcels)
+        self._save.configure(state="normal" if self._review.has_items else "disabled")
+        if not self._review.has_items:
+            self._review.grid_forget()
+        self.show_message(f"تم حفظ {applied} رقم قومي يدويًا. المتبقي للمراجعة: {self._review.count}.", theme.SUCCESS)
 
     def show_message(self, message: str, color: str) -> None:
         self._message.configure(text=message, text_color=color)
@@ -96,77 +107,19 @@ class ResultPage(ctk.CTkScrollableFrame):
         if is_saving:
             self.show_message("جارٍ حفظ التصحيحات في ملف Excel...", theme.INFO)
 
-    def _render_review_table(self, parcels) -> None:
-        for child in self._review.winfo_children():
-            child.destroy()
-        self._entries = {}
-        items = [(i, parcel) for i, parcel in enumerate(parcels) if parcel.national_id == UNKNOWN_NATIONAL_ID]
-        if not items:
-            self._review.grid_forget()
-            self._save.configure(state="disabled")
-            return
-        self._review.grid(row=5, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_M)
-        self._review.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self._review, text=f"حالات تحتاج مراجعة يدوية ({len(items)})", font=theme.FONT_HEADING, anchor="e").grid(row=0, column=0, sticky="ew", padx=theme.PAD_M, pady=(theme.PAD_M, theme.PAD_S))
-        body = ctk.CTkScrollableFrame(self._review, height=240, fg_color=theme.SURFACE_MUTED)
-        body.grid(row=1, column=0, sticky="ew", padx=theme.PAD_M, pady=(0, theme.PAD_M))
-        body.grid_columnconfigure(0, weight=1)
-        for row, (index, parcel) in enumerate(items):
-            self._add_review_row(body, row, index, parcel)
-        self._save.configure(state="normal")
-
-    def _add_review_row(self, parent, row: int, index: int, parcel) -> None:
-        item = ctk.CTkFrame(parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_BUTTON)
-        item.grid(row=row, column=0, sticky="ew", padx=theme.PAD_S, pady=theme.PAD_XS)
-        item.grid_columnconfigure(0, weight=1)
-        details = f"الحيازة: {parcel.holding_number} | الحائز: {parcel.holder_name}\nالقطعة: {parcel.land_number} | الحوض: {parcel.basin_name}"
-        ctk.CTkLabel(item, text=details, font=theme.FONT_BODY, justify="right", anchor="e").grid(row=0, column=0, sticky="ew", padx=theme.PAD_S, pady=theme.PAD_S)
-        ctk.CTkButton(
-            item,
-            text="نسخ الاسم",
-            width=76,
-            command=lambda: self._copy_text(parcel.holder_name, "اسم الحائز"),
-        ).grid(row=0, column=1, padx=(0, theme.PAD_S))
-        ctk.CTkButton(
-            item,
-            text="نسخ الحيازة",
-            width=88,
-            command=lambda: self._copy_text(parcel.holding_number, "رقم الحيازة"),
-        ).grid(row=0, column=2, padx=(0, theme.PAD_S))
-        entry = ctk.CTkEntry(item, width=160, placeholder_text="الرقم القومي (14 رقمًا)")
-        entry.grid(row=0, column=3, padx=(0, theme.PAD_S))
-        self._entries[index] = entry
-
     def _save_manual_ids(self) -> None:
-        updates, invalid = self._collect_updates()
-        if invalid:
-            self.show_message("أدخل رقمًا قوميًّا مكوّنًا من 14 رقمًا في كل خانة مستخدمة.", theme.ERROR)
-            return
-        if not updates:
-            self.show_message("أدخل رقمًا قوميًّا واحدًا على الأقل للحفظ.", theme.WARNING)
-            return
-        if self._on_save_manual_ids:
+        updates, error = self._review.valid_updates()
+        if error:
+            self.show_message(error, theme.ERROR)
+        elif updates and self._on_save_manual_ids:
             self._on_save_manual_ids(updates)
+        else:
+            self.show_message("أدخل رقمًا قوميًّا واحدًا على الأقل للحفظ.", theme.WARNING)
 
-    def _collect_updates(self) -> tuple[dict[int, str], bool]:
-        updates = {}
-        invalid = False
-        for index, entry in self._entries.items():
-            value = entry.get().strip()
-            if not value:
-                continue
-            is_valid = is_valid_national_id(value)
-            entry.configure(border_color=theme.NEUTRAL_300 if is_valid else theme.ERROR)
-            if is_valid:
-                updates[index] = value
-            else:
-                invalid = True
-        return updates, invalid
-
-    def _copy_text(self, value: str, label: str) -> None:
-        self.clipboard_clear()
-        self.clipboard_append(value)
-        self.show_message(f"تم نسخ {label}.", theme.INFO)
+    def _summary_text(self, summary: dict, parcels) -> str:
+        total = summary["parcel_count"]
+        rate = ((total - summary["unmatched_count"]) / total * 100) if total else 0
+        return f"إجمالي القطع: {total}  |  الأحواض: {summary['basin_count']}\nنسبة الربط: {rate:.0f}%  |  تحتاج مراجعة: {self._review.count_for(parcels)}"
 
     def _toggle_log(self) -> None:
         if self._log.winfo_ismapped():
@@ -176,11 +129,7 @@ class ResultPage(ctk.CTkScrollableFrame):
             self._log.grid(row=6, column=0, sticky="ew", padx=theme.PAD_L, pady=(0, theme.PAD_S))
             self._log_toggle.configure(text="إخفاء سجل العمليات")
 
-    def _match_rate(self, summary: dict) -> float:
-        total = summary["parcel_count"]
-        return ((total - summary["unmatched_count"]) / total * 100) if total else 0
-
-    def _set_log(self, text: str) -> None:
+    def _replace_log(self, text: str) -> None:
         self._log.configure(state="normal")
         self._log.delete("1.0", "end")
         self._log.insert("end", text)
