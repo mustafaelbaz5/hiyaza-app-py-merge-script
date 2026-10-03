@@ -54,6 +54,13 @@ class Parcel:
     border_west: str
     border_south: str
     border_east: str
+    # Kept out of the Excel export.  These fields preserve the registered
+    # person's identity for safe, person-level manual review.
+    review_person_key: tuple[str, str] | None = None
+    source_holder_name: str = ""
+    review_reason: str = ""
+    suggested_national_id: str = ""
+    suggested_holder_name: str = ""
 
 
 @dataclass

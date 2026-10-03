@@ -5,6 +5,7 @@ from core.codes import CodesDB
 from core.merger import (
     UNKNOWN_NATIONAL_ID,
     apply_manual_national_ids,
+    build_manual_review_people,
     is_valid_national_id,
     merge,
 )
@@ -163,7 +164,7 @@ def test_name_spelling_variants_still_match(codes_files):
     assert result.unmatched_count == 0
 
 
-def test_first_four_name_words_can_match_different_last_name(codes_files):
+def test_first_four_name_words_are_suggested_for_manual_review(codes_files):
     info = _make_association_info(codes_files)
     db = CodesDB(*codes_files)
     registered = _registered_df(
@@ -175,9 +176,11 @@ def test_first_four_name_words_can_match_different_last_name(codes_files):
 
     result = merge(registered, approved, db, info)
 
-    assert result.parcels[0].national_id == "29510251202211"
-    assert result.parcels[0].holder_name == "محمد على محمد الشحات شاهين"
-    assert result.unmatched_count == 0
+    parcel = result.parcels[0]
+    assert parcel.national_id == UNKNOWN_NATIONAL_ID
+    assert parcel.suggested_national_id == "29510251202211"
+    assert parcel.suggested_holder_name == "محمد على محمد الشحات شاهين"
+    assert result.unmatched_count == 1
 
 
 def test_missing_holder_gets_unknown_national_id_even_if_holding_exists(codes_files):
@@ -229,11 +232,50 @@ def test_manual_national_id_replaces_unknown_value_only(codes_files):
     )
     result = merge(registered, approved, db, info)
 
-    applied = apply_manual_national_ids(result, {0: "29510251202211"})
+    person = build_manual_review_people(result.parcels)[0]
+    applied = apply_manual_national_ids(result, {person.key: "29510251202211"})
 
     assert applied == 1
     assert result.parcels[0].national_id == "29510251202211"
     assert result.parcels[1].national_id == "27812251200234"
+
+
+def test_manual_id_updates_all_parcels_for_one_registered_person(codes_files):
+    info = _make_association_info(codes_files)
+    db = CodesDB(*codes_files)
+    registered = _registered_df(
+        [
+            {"holding_number": "50", "holder_name": "غير موجود", "land_number": "1", "basin_name": "الدماسه"},
+            {"holding_number": "50", "holder_name": "غير موجود", "land_number": "2", "basin_name": "الدماسه"},
+            {"holding_number": "50", "holder_name": "شخص آخر", "land_number": "3", "basin_name": "الدماسه"},
+        ]
+    )
+    result = merge(registered, _approved_df([]), db, info)
+
+    people = build_manual_review_people(result.parcels)
+    assert len(people) == 2
+    assert len(people[0].parcel_indexes) == 2
+
+    applied = apply_manual_national_ids(result, {people[0].key: "29510251202211"})
+    assert applied == 2
+    assert [parcel.national_id for parcel in result.parcels] == [
+        "29510251202211", "29510251202211", UNKNOWN_NATIONAL_ID,
+    ]
+
+
+def test_leading_zero_holding_is_not_the_same_holding(codes_files):
+    info = _make_association_info(codes_files)
+    db = CodesDB(*codes_files)
+    registered = _registered_df(
+        [{"holding_number": "0048", "holder_name": "احمد محمد", "basin_name": "الدماسه"}]
+    )
+    approved = _approved_df(
+        [{"holding_number": "48", "holder_name": "احمد محمد", "national_id": "29510251202211"}]
+    )
+
+    result = merge(registered, approved, db, info)
+    assert result.parcels[0].holding_number == "0048"
+    assert result.parcels[0].national_id == UNKNOWN_NATIONAL_ID
 
 
 @pytest.mark.parametrize(

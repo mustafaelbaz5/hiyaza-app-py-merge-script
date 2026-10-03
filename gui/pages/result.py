@@ -17,7 +17,7 @@ class ResultPage(ctk.CTkScrollableFrame):
     def __init__(self, master, on_new_merge: Callable[[], None], **kwargs) -> None:
         super().__init__(master, fg_color=theme.SURFACE_MUTED, **kwargs)
         self._on_new_merge = on_new_merge
-        self._on_save_manual_ids: Callable[[dict[int, str]], None] | None = None
+        self._on_save_manual_ids: Callable[[dict, str], None] | None = None
         self._output_path: Path | None = None
         self.grid_columnconfigure(0, weight=1)
         self._build_layout()
@@ -80,7 +80,7 @@ class ResultPage(ctk.CTkScrollableFrame):
         self._log.see("end")
         self._log.configure(state="disabled")
 
-    def show_success(self, summary: dict, on_save_manual_ids: Callable[[dict[int, str]], None]) -> None:
+    def show_success(self, summary: dict, on_save_manual_ids: Callable[[dict, str], None]) -> None:
         self._output_path = summary["output_path"]
         self._on_save_manual_ids = on_save_manual_ids
         parcels = summary["result"].parcels
@@ -92,12 +92,15 @@ class ResultPage(ctk.CTkScrollableFrame):
         self.show_message("اكتمل الدمج. راجع الحالات اليدوية إن وُجدت ثم احفظ.", theme.SUCCESS)
         self._open.configure(state="normal")
 
-    def refresh_review_table(self, parcels, applied: int) -> None:
+    def refresh_review_table(self, parcels, applied: int, people_saved: int) -> None:
         self._review.set_parcels(parcels)
         self._save.configure(state="normal" if self._review.has_items else "disabled")
         if not self._review.has_items:
             self._review.grid_forget()
-        self.show_message(f"تم حفظ {applied} رقم قومي يدويًا. المتبقي للمراجعة: {self._review.count}.", theme.SUCCESS)
+        self.show_message(
+            f"تم حفظ أرقام {people_saved} شخص وتحديث {applied} قطعة. المتبقي للمراجعة: {self._review.count}.",
+            theme.SUCCESS,
+        )
 
     def show_message(self, message: str, color: str) -> None:
         self._message.configure(text=message, text_color=color)

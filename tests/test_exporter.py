@@ -1,7 +1,7 @@
 import openpyxl
 
 from core.exporter import ALL_PARCELS_SHEET_NAME, SUMMARY_SHEET_NAME, export
-from core.merger import UNKNOWN_NATIONAL_ID, apply_manual_national_ids
+from core.merger import UNKNOWN_NATIONAL_ID, apply_manual_national_ids, build_manual_review_people
 from core.models import AssociationInfo, AssociationType, BasinInfo, MergeResult, Parcel
 
 
@@ -89,7 +89,8 @@ def test_border_hyperlink_resolved(tmp_path):
 def test_manual_national_id_is_written_without_changing_other_parcels(tmp_path):
     result = _make_result()
     result.parcels[0].national_id = UNKNOWN_NATIONAL_ID
-    apply_manual_national_ids(result, {0: "29510251202211"})
+    person = build_manual_review_people(result.parcels)[0]
+    apply_manual_national_ids(result, {person.key: "29510251202211"})
     output_path = tmp_path / "output.xlsx"
 
     export(result, output_path)

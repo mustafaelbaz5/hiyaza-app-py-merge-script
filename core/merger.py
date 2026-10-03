@@ -1,6 +1,9 @@
-"""Joins registered + approved DataFrames with reference codes into a MergeResult."""
+"""Joins registered + approved data with safe person-level review support."""
 
 import logging
+from collections import defaultdict
+from collections.abc import Mapping
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -26,6 +29,22 @@ def _build_join_lookup(approved: pd.DataFrame) -> set[str]:
 
 
 UNKNOWN_NATIONAL_ID = "11111111111111"
+PersonKey = tuple[str, str]
+
+
+@dataclass(frozen=True)
+class ManualReviewPerson:
+    """One unresolved person and all registered parcels that belong to them."""
+
+    key: PersonKey
+    holding_number: str
+    holder_name: str
+    parcel_indexes: tuple[int, ...]
+    land_numbers: tuple[str, ...]
+    basin_names: tuple[str, ...]
+    reason: str
+    suggested_national_id: str = ""
+    suggested_holder_name: str = ""
 
 
 def is_valid_national_id(value: str) -> bool:
@@ -33,20 +52,62 @@ def is_valid_national_id(value: str) -> bool:
     return len(value) == 14 and value.isdigit()
 
 
-def apply_manual_national_ids(result: MergeResult, updates: dict[int, str]) -> int:
-    """Apply validated manual national IDs to parcels awaiting review."""
-    applied = 0
-    for index, national_id in updates.items():
+def _parcel_person_key(parcel: Parcel) -> PersonKey:
+    """Return the registered-person key retained for manual review."""
+    return parcel.review_person_key or (
+        parcel.holding_number,
+        normalize_holder_name(parcel.source_holder_name or parcel.holder_name),
+    )
+
+
+def build_manual_review_people(parcels: list[Parcel]) -> list[ManualReviewPerson]:
+    """Group unresolved parcels so a person is reviewed once, not per parcel."""
+    grouped: dict[PersonKey, list[tuple[int, Parcel]]] = defaultdict(list)
+    for index, parcel in enumerate(parcels):
+        if parcel.national_id == UNKNOWN_NATIONAL_ID:
+            grouped[_parcel_person_key(parcel)].append((index, parcel))
+
+    people: list[ManualReviewPerson] = []
+    for key, entries in grouped.items():
+        first = entries[0][1]
+        people.append(
+            ManualReviewPerson(
+                key=key,
+                holding_number=first.holding_number,
+                holder_name=first.source_holder_name or first.holder_name,
+                parcel_indexes=tuple(index for index, _ in entries),
+                land_numbers=tuple(parcel.land_number for _, parcel in entries),
+                basin_names=tuple(dict.fromkeys(parcel.basin_name for _, parcel in entries)),
+                reason=first.review_reason or "لا يوجد رقم قومي مطابق في ملف المعتمد.",
+                suggested_national_id=first.suggested_national_id,
+                suggested_holder_name=first.suggested_holder_name,
+            )
+        )
+    return people
+
+
+def apply_manual_national_ids(
+    result: MergeResult, updates: Mapping[PersonKey, str]
+) -> int:
+    """Apply each validated ID to every unresolved parcel for that person."""
+    for person_key, national_id in updates.items():
         if not is_valid_national_id(national_id):
             raise ValueError("National ID must contain exactly 14 digits")
-        parcel = result.parcels[index]
+
+    pending_by_person: dict[PersonKey, list[Parcel]] = defaultdict(list)
+    for parcel in result.parcels:
         if parcel.national_id == UNKNOWN_NATIONAL_ID:
+            pending_by_person[_parcel_person_key(parcel)].append(parcel)
+
+    applied = 0
+    for person_key, national_id in updates.items():
+        for parcel in pending_by_person.get(person_key, []):
             parcel.national_id = national_id
             applied += 1
     return applied
 
 
-def _build_person_lookup(approved: pd.DataFrame) -> tuple[dict[tuple[str, str], dict], dict[tuple[str, tuple[str, ...]], list[dict]]]:
+def _build_person_lookup(approved: pd.DataFrame) -> tuple[dict[PersonKey, dict], dict[tuple[str, tuple[str, ...]], list[dict]]]:
     """Return exact and first-four-name approved lookups."""
     lookup: dict[tuple[str, str], dict] = {}
     prefix_lookup: dict[tuple[str, tuple[str, ...]], list[dict]] = {}
@@ -112,11 +173,25 @@ def merge(
         normalized_name = normalize_holder_name(row.holder_name)
         prefix_candidates = []
         person_fields = person_lookup.get((row.holding_number, normalized_name))
+        review_reason = ""
+        suggested_national_id = ""
+        suggested_holder_name = ""
         if person_fields is None:
             words = tuple(normalized_name.split())
             prefix_candidates = prefix_lookup.get((row.holding_number, words[:4]), []) if len(words) >= 4 else []
             if len(prefix_candidates) == 1:
-                person_fields = prefix_candidates[0]
+                # Similar names are helpful evidence but not proof of identity.
+                # Keep the candidate for the reviewer; never assign it silently.
+                candidate = prefix_candidates[0]
+                person_fields = {
+                    "national_id": UNKNOWN_NATIONAL_ID,
+                    "unified_holding_id": "",
+                    "parcel_count": 0,
+                    "approved_holder_name": "",
+                }
+                review_reason = "تطابق أول أربعة أسماء فقط؛ يلزم تأكيد الرقم القومي."
+                suggested_national_id = candidate["national_id"]
+                suggested_holder_name = candidate["approved_holder_name"]
             else:
                 person_fields = {
                     "national_id": UNKNOWN_NATIONAL_ID,
@@ -124,10 +199,13 @@ def merge(
                     "parcel_count": 0,
                     "approved_holder_name": "",
                 }
-        if not matched and len(prefix_candidates) == 1:
-            matched = True
-            unmatched_count -= 1
-            warnings.pop()
+                review_reason = (
+                    "يوجد أكثر من مرشح متشابه للاسم؛ يلزم إدخال الرقم القومي يدويًا."
+                    if prefix_candidates
+                    else "لا يوجد رقم قومي مطابق في ملف المعتمد."
+                )
+        elif person_fields["national_id"] == UNKNOWN_NATIONAL_ID:
+            review_reason = "تعارض في الأرقام القومية لنفس الحيازة والاسم في ملف المعتمد."
         basin_code = codes_db.find_basin_code(
             row.basin_name, association_info.code, association_info.type
         )
@@ -156,6 +234,11 @@ def merge(
                 border_west=row.border_west,
                 border_south=row.border_south,
                 border_east=row.border_east,
+                review_person_key=(row.holding_number, normalized_name),
+                source_holder_name=row.holder_name,
+                review_reason=review_reason,
+                suggested_national_id=suggested_national_id,
+                suggested_holder_name=suggested_holder_name,
             )
         )
 

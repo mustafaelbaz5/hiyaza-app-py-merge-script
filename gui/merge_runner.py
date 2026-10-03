@@ -7,7 +7,7 @@ from pathlib import Path
 from core.codes import CodesDB
 from core.exceptions import MergerError
 from core.exporter import export
-from core.merger import apply_manual_national_ids, merge
+from core.merger import PersonKey, apply_manual_national_ids, merge
 from core.models import AssociationType, MergeResult
 from core.parser import parse_approved, parse_registered
 
@@ -38,7 +38,7 @@ class MergeRunner:
         self,
         result: MergeResult,
         output_path: Path,
-        updates: dict[int, str],
+        updates: dict[PersonKey, str],
         on_done: Callable[[dict | None, Exception | None], None],
     ) -> None:
         thread = threading.Thread(
@@ -101,7 +101,7 @@ class MergeRunner:
         self,
         result: MergeResult,
         output_path: Path,
-        updates: dict[int, str],
+        updates: dict[PersonKey, str],
         on_done: Callable[[dict | None, Exception | None], None],
     ) -> None:
         try:
@@ -110,6 +110,6 @@ class MergeRunner:
             remaining = sum(
                 parcel.national_id == "11111111111111" for parcel in result.parcels
             )
-            on_done({"applied": applied, "remaining": remaining}, None)
+            on_done({"applied": applied, "people_saved": len(updates), "remaining": remaining}, None)
         except (MergerError, OSError, ValueError) as error:
             on_done(None, MergerError(f"تعذر حفظ التصحيحات اليدوية: {error}"))
