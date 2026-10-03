@@ -1,6 +1,7 @@
 import openpyxl
 
 from core.exporter import ALL_PARCELS_SHEET_NAME, SUMMARY_SHEET_NAME, export
+from core.merger import UNKNOWN_NATIONAL_ID, apply_manual_national_ids
 from core.models import AssociationInfo, AssociationType, BasinInfo, MergeResult, Parcel
 
 
@@ -83,3 +84,16 @@ def test_border_hyperlink_resolved(tmp_path):
     # second parcel row's north border references the first parcel by name
     linked_cell = ws.cell(row=4, column=19)
     assert linked_cell.hyperlink is not None
+
+
+def test_manual_national_id_is_written_without_changing_other_parcels(tmp_path):
+    result = _make_result()
+    result.parcels[0].national_id = UNKNOWN_NATIONAL_ID
+    apply_manual_national_ids(result, {0: "29510251202211"})
+    output_path = tmp_path / "output.xlsx"
+
+    export(result, output_path)
+
+    ws = openpyxl.load_workbook(output_path)[ALL_PARCELS_SHEET_NAME]
+    assert ws.cell(row=3, column=11).value == "29510251202211"
+    assert ws.cell(row=4, column=11).value == "12345678901234"

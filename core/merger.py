@@ -28,6 +28,24 @@ def _build_join_lookup(approved: pd.DataFrame) -> set[str]:
 UNKNOWN_NATIONAL_ID = "11111111111111"
 
 
+def is_valid_national_id(value: str) -> bool:
+    """Return whether a national ID has the required fourteen digits."""
+    return len(value) == 14 and value.isdigit()
+
+
+def apply_manual_national_ids(result: MergeResult, updates: dict[int, str]) -> int:
+    """Apply validated manual national IDs to parcels awaiting review."""
+    applied = 0
+    for index, national_id in updates.items():
+        if not is_valid_national_id(national_id):
+            raise ValueError("National ID must contain exactly 14 digits")
+        parcel = result.parcels[index]
+        if parcel.national_id == UNKNOWN_NATIONAL_ID:
+            parcel.national_id = national_id
+            applied += 1
+    return applied
+
+
 def _build_person_lookup(approved: pd.DataFrame) -> tuple[dict[tuple[str, str], dict], dict[tuple[str, tuple[str, ...]], list[dict]]]:
     """Return exact and first-four-name approved lookups."""
     lookup: dict[tuple[str, str], dict] = {}

@@ -1,4 +1,4 @@
-"""Home page: file selection + auto-detect panel."""
+"""Scrollable start page for selecting merge inputs."""
 
 from collections.abc import Callable
 from datetime import date
@@ -13,78 +13,114 @@ from gui.widgets.file_picker import FilePicker
 from gui.widgets.info_badge import InfoBadge
 
 
-class HomePage(ctk.CTkFrame):
+class HomePage(ctk.CTkScrollableFrame):
     def __init__(
         self, master, on_start: Callable[[Path, Path, Path, dict], None], **kwargs
     ) -> None:
-        super().__init__(master, fg_color="transparent", **kwargs)
+        super().__init__(master, fg_color=theme.SURFACE_MUTED, **kwargs)
         self._on_start = on_start
         self._detected_info: dict | None = None
+        self.grid_columnconfigure(0, weight=1)
+        self._build_header()
+        self._build_inputs()
+        self._build_actions()
 
-        self._build_title()
+    def _build_header(self) -> None:
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=theme.PAD_L, pady=(theme.PAD_XL, theme.PAD_M))
+        header.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(header, text=theme.WINDOW_TITLE, font=theme.FONT_TITLE, anchor="e").grid(
+            row=0, column=0, sticky="ew"
+        )
+        ctk.CTkLabel(
+            header,
+            text="اختر ملفي المسجل والمعتمد ثم راجع بيانات الجمعية قبل بدء الدمج.",
+            font=theme.FONT_BODY,
+            text_color=theme.NEUTRAL_700,
+            anchor="e",
+        ).grid(row=1, column=0, sticky="ew", pady=(4, 0))
+
+    def _build_inputs(self) -> None:
         self._registered_picker = FilePicker(
-            self, "📄 ملف المسجل (الحيازات الزراعية المسجلة)"
+            self,
+            "ملف المسجل",
+            "القطع والحيازات المسجلة التي ستكون أساس ملف الناتج.",
+            on_selected=self._update_readiness,
         )
-        self._registered_picker.pack(fill="x", padx=theme.PAD_L, pady=theme.PAD_S)
-
+        self._registered_picker.grid(row=1, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_S)
         self._approved_picker = FilePicker(
-            self, "📋 ملف المعتمد (حيازات الجمعية المعتمدة)", on_selected=self._on_approved_selected
+            self,
+            "ملف المعتمد",
+            "الأرقام القومية وبيانات الحائزين المعتمدة.",
+            on_selected=self._on_approved_selected,
         )
-        self._approved_picker.pack(fill="x", padx=theme.PAD_L, pady=theme.PAD_S)
-
+        self._approved_picker.grid(row=2, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_S)
         self._info_badge = InfoBadge(self)
-        self._info_badge.pack(fill="x", padx=theme.PAD_L, pady=theme.PAD_M)
-
+        self._info_badge.grid(row=3, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_S)
         self._output_picker = FilePicker(
-            self, "💾 مكان حفظ الملف الناتج", save_mode=True
+            self,
+            "مكان حفظ ملف الناتج",
+            "سيتم إنشاء أو تحديث ملف Excel في المكان الذي تختاره.",
+            on_selected=self._update_readiness,
+            save_mode=True,
         )
-        self._output_picker.pack(fill="x", padx=theme.PAD_L, pady=theme.PAD_S)
+        self._output_picker.grid(row=4, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_S)
 
+    def _build_actions(self) -> None:
+        actions = ctk.CTkFrame(self, fg_color="transparent")
+        actions.grid(row=5, column=0, sticky="ew", padx=theme.PAD_L, pady=(theme.PAD_M, theme.PAD_XL))
+        actions.grid_columnconfigure(0, weight=1)
+        self._ready_label = ctk.CTkLabel(
+            actions, text="أكمل اختيار الملفات لبدء الدمج.", font=theme.FONT_SMALL, text_color=theme.NEUTRAL_500, anchor="e"
+        )
+        self._ready_label.grid(row=0, column=0, sticky="ew", pady=(0, theme.PAD_S))
         self._start_button = ctk.CTkButton(
-            self, text="ابدأ الدمج  →", height=44, command=self._handle_start
+            actions, text="بدء الدمج", height=46, command=self._handle_start, state="disabled"
         )
-        self._start_button.pack(pady=theme.PAD_L)
-
-    def _build_title(self) -> None:
-        title = ctk.CTkLabel(
-            self, text=f"🌾  {theme.WINDOW_TITLE}", font=theme.FONT_TITLE
-        )
-        title.pack(pady=(theme.PAD_L, theme.PAD_M))
+        self._start_button.grid(row=1, column=0, sticky="ew")
 
     def _on_approved_selected(self, path: Path) -> None:
         try:
-            info = detect_association(path)
-        except MergerError as e:
-            self._info_badge.show_error(str(e))
+            self._detected_info = detect_association(path)
+        except MergerError as error:
             self._detected_info = None
-            return
+            self._info_badge.show_error(str(error))
         except FileNotFoundError:
-            self._info_badge.show_error("الملف غير موجود")
             self._detected_info = None
+            self._info_badge.show_error("ملف المعتمد غير موجود.")
+        else:
+            self._info_badge.show_detected(self._detected_info)
+            self._suggest_output_path(path)
+        self._update_readiness()
+
+    def _suggest_output_path(self, approved_path: Path) -> None:
+        info = self._detected_info
+        if info is None:
             return
-
-        self._detected_info = info
-        self._info_badge.show_detected(info)
-        self._suggest_output_path(path, info)
-
-    def _suggest_output_path(self, approved_path: Path, info: dict) -> None:
         city_name = info["association_name"].split("-")[0].strip()
-        association_type_name = {
-            "credit": "\u0627\u0626\u062a\u0645\u0627\u0646",
-            "reform": "\u0627\u0635\u0644\u0627\u062d",
-        }.get(info["association_type"], info["association_type"])
-        today = date.today().isoformat()
+        type_name = "ائتمان" if info["association_type"] == "credit" else "اصلاح"
         base_dir = theme.OUTPUT_BASE_DIRS.get(info["association_type"], approved_path.parent)
-        suggested = base_dir / f"{city_name}_مدمج_{today}.xlsx"
-        suggested = base_dir / f"{city_name}_\u0645\u062f\u0645\u062c_{association_type_name}_{today}.xlsx"
-        self._output_picker.set_path(suggested)
+        filename = f"{city_name}_مدمج_{type_name}_{date.today().isoformat()}.xlsx"
+        self._output_picker.set_path(base_dir / filename)
+
+    def _update_readiness(self, _path: Path | None = None) -> None:
+        is_ready = bool(
+            self._registered_picker.path
+            and self._approved_picker.path
+            and self._output_picker.path
+            and self._detected_info
+        )
+        self._start_button.configure(state="normal" if is_ready else "disabled")
+        text = "الملفات جاهزة للدمج." if is_ready else "أكمل اختيار الملفات لبدء الدمج."
+        color = theme.SUCCESS if is_ready else theme.NEUTRAL_500
+        self._ready_label.configure(text=text, text_color=color)
 
     def _handle_start(self) -> None:
-        registered_path = self._registered_picker.path
-        approved_path = self._approved_picker.path
-        output_path = self._output_picker.path
-
-        if not (registered_path and approved_path and output_path and self._detected_info):
+        if not self._detected_info:
             return
-
-        self._on_start(registered_path, approved_path, output_path, self._detected_info)
+        self._on_start(
+            self._registered_picker.path,
+            self._approved_picker.path,
+            self._output_picker.path,
+            self._detected_info,
+        )

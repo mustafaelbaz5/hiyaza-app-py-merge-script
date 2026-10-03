@@ -7,8 +7,8 @@ from pathlib import Path
 from core.codes import CodesDB
 from core.exceptions import MergerError
 from core.exporter import export
-from core.merger import merge
-from core.models import AssociationType
+from core.merger import apply_manual_national_ids, merge
+from core.models import AssociationType, MergeResult
 from core.parser import parse_approved, parse_registered
 
 ProgressCallback = Callable[[float, str], None]
@@ -30,6 +30,20 @@ class MergeRunner:
         thread = threading.Thread(
             target=self._run,
             args=(registered_path, approved_path, output_path, detected_info, on_progress, on_done),
+            daemon=True,
+        )
+        thread.start()
+
+    def save_manual_ids_async(
+        self,
+        result: MergeResult,
+        output_path: Path,
+        updates: dict[int, str],
+        on_done: Callable[[dict | None, Exception | None], None],
+    ) -> None:
+        thread = threading.Thread(
+            target=self._save_manual_ids,
+            args=(result, output_path, updates, on_done),
             daemon=True,
         )
         thread.start()
@@ -71,6 +85,7 @@ class MergeRunner:
             on_progress(1.0, "تم الانتهاء بنجاح")
             summary = {
                 "output_path": output_path,
+                "result": result,
                 "parcel_count": len(result.parcels),
                 "basin_count": len(result.basins),
                 "unmatched_count": result.unmatched_count,
@@ -81,3 +96,20 @@ class MergeRunner:
             on_done(None, e)
         except Exception as e:  # noqa: BLE001
             on_done(None, MergerError(f"حدث خطأ غير متوقع: {e}"))
+
+    def _save_manual_ids(
+        self,
+        result: MergeResult,
+        output_path: Path,
+        updates: dict[int, str],
+        on_done: Callable[[dict | None, Exception | None], None],
+    ) -> None:
+        try:
+            applied = apply_manual_national_ids(result, updates)
+            export(result, output_path)
+            remaining = sum(
+                parcel.national_id == "11111111111111" for parcel in result.parcels
+            )
+            on_done({"applied": applied, "remaining": remaining}, None)
+        except (MergerError, OSError, ValueError) as error:
+            on_done(None, MergerError(f"تعذر حفظ التصحيحات اليدوية: {error}"))

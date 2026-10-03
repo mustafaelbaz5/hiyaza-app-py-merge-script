@@ -1,7 +1,13 @@
 import pandas as pd
+import pytest
 
 from core.codes import CodesDB
-from core.merger import merge
+from core.merger import (
+    UNKNOWN_NATIONAL_ID,
+    apply_manual_national_ids,
+    is_valid_national_id,
+    merge,
+)
 from core.models import AssociationInfo, AssociationType
 
 
@@ -207,6 +213,35 @@ def test_conflicting_duplicate_person_ids_get_unknown_id_without_stopping_merge(
 
     assert result.parcels[0].national_id == "11111111111111"
     assert result.unmatched_count == 0
+
+
+def test_manual_national_id_replaces_unknown_value_only(codes_files):
+    info = _make_association_info(codes_files)
+    db = CodesDB(*codes_files)
+    registered = _registered_df(
+        [
+            {"holding_number": "50", "holder_name": "غير موجود", "basin_name": "الدماسه"},
+            {"holding_number": "51", "holder_name": "حائز معتمد", "basin_name": "الدماسه"},
+        ]
+    )
+    approved = _approved_df(
+        [{"holding_number": "51", "holder_name": "حائز معتمد", "national_id": "27812251200234"}]
+    )
+    result = merge(registered, approved, db, info)
+
+    applied = apply_manual_national_ids(result, {0: "29510251202211"})
+
+    assert applied == 1
+    assert result.parcels[0].national_id == "29510251202211"
+    assert result.parcels[1].national_id == "27812251200234"
+
+
+@pytest.mark.parametrize(
+    "national_id",
+    ["2951025120221", "295102512022111", "2951025120221a"],
+)
+def test_invalid_manual_national_id_fails_validation(national_id):
+    assert not is_valid_national_id(national_id)
 
 
 def test_multiple_parcels_same_holding_get_individual_areas(codes_files):

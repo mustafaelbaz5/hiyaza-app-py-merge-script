@@ -1,57 +1,48 @@
-"""All colors, fonts, and spacing constants for the GUI. No logic here."""
+"""Shared visual tokens for the desktop application."""
 
 from pathlib import Path
 
-# Primary — agricultural green
-PRIMARY_900 = "#1B5E20"
-PRIMARY_700 = "#388E3C"
-PRIMARY_500 = "#66BB6A"
-PRIMARY_100 = "#E8F5E9"
-PRIMARY_50 = "#F1F8E9"
+PRIMARY_900 = "#14532D"
+PRIMARY_700 = "#1F7A42"
+PRIMARY_500 = "#43A047"
+PRIMARY_100 = "#DCFCE7"
+PRIMARY_50 = "#F0FDF4"
 
-# Neutral
-NEUTRAL_900 = "#212121"
-NEUTRAL_700 = "#616161"
-NEUTRAL_300 = "#E0E0E0"
-NEUTRAL_100 = "#F5F5F5"
-NEUTRAL_50 = "#FAFAFA"
+SURFACE = "#FFFFFF"
+SURFACE_MUTED = "#F8FAFC"
+NEUTRAL_900 = "#172033"
+NEUTRAL_700 = "#475569"
+NEUTRAL_500 = "#64748B"
+NEUTRAL_300 = "#CBD5E1"
+NEUTRAL_100 = "#F1F5F9"
 WHITE = "#FFFFFF"
 
-# Semantic
-SUCCESS = "#2E7D32"
-WARNING = "#F57F17"
-ERROR = "#C62828"
-INFO = "#1565C0"
+SUCCESS = "#15803D"
+WARNING = "#B45309"
+ERROR = "#B91C1C"
+INFO = "#1D4ED8"
 
-# Accent
-ACCENT_GOLD = "#F9A825"
-
-# Typography
 FONT_FAMILY = "Arial"
+FONT_TITLE = (FONT_FAMILY, 24, "bold")
+FONT_HEADING = (FONT_FAMILY, 16, "bold")
+FONT_BODY = (FONT_FAMILY, 13)
+FONT_SMALL = (FONT_FAMILY, 11)
+FONT_DATA = (FONT_FAMILY, 12)
 
-FONT_TITLE = (FONT_FAMILY, 20, "bold")
-FONT_HEADING = (FONT_FAMILY, 14, "bold")
-FONT_BODY = (FONT_FAMILY, 12)
-FONT_SMALL = (FONT_FAMILY, 10)
-FONT_MONO = ("Courier New", 11)
-
-# Spacing
 PAD_XL = 32
 PAD_L = 24
 PAD_M = 16
 PAD_S = 8
 PAD_XS = 4
+RADIUS_CARD = 14
+RADIUS_BUTTON = 9
 
-RADIUS_CARD = 12
-RADIUS_BUTTON = 8
-RADIUS_BADGE = 6
-
-# Window
 WINDOW_TITLE = "دمج بيانات الحيازات الزراعية"
-WINDOW_WIDTH = 720
-WINDOW_HEIGHT = 560
+WINDOW_WIDTH = 980
+WINDOW_HEIGHT = 760
+WINDOW_MIN_WIDTH = 780
+WINDOW_MIN_HEIGHT = 600
 
-# Default output locations, keyed by association type
 OUTPUT_BASE_DIRS = {
     "credit": Path(r"D:\WORK\hiyaza_work\app_data\ائتمان"),
     "reform": Path(r"D:\WORK\hiyaza_work\app_data\اصلاح"),

@@ -1,4 +1,4 @@
-"""Reusable file-selection row: label + path display + browse button."""
+"""Responsive file selection card."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -14,46 +14,51 @@ class FilePicker(ctk.CTkFrame):
         self,
         master,
         label_text: str,
+        hint_text: str,
         on_selected: Callable[[Path], None] | None = None,
         save_mode: bool = False,
         **kwargs,
     ) -> None:
-        super().__init__(master, fg_color="transparent", **kwargs)
+        super().__init__(
+            master,
+            fg_color=theme.SURFACE,
+            corner_radius=theme.RADIUS_CARD,
+            **kwargs,
+        )
         self._on_selected = on_selected
         self._save_mode = save_mode
         self._path: Path | None = None
+        self.grid_columnconfigure(0, weight=1)
 
-        self._label = ctk.CTkLabel(
-            self, text=label_text, font=theme.FONT_BODY, anchor="e"
+        ctk.CTkLabel(self, text=label_text, font=theme.FONT_HEADING, anchor="e").grid(
+            row=0, column=0, sticky="ew", padx=theme.PAD_M, pady=(theme.PAD_M, 0)
         )
-        self._label.pack(fill="x", pady=(0, theme.PAD_XS))
+        ctk.CTkLabel(
+            self, text=hint_text, font=theme.FONT_SMALL, text_color=theme.NEUTRAL_500, anchor="e"
+        ).grid(row=1, column=0, sticky="ew", padx=theme.PAD_M, pady=(2, theme.PAD_S))
 
         row = ctk.CTkFrame(self, fg_color="transparent")
-        row.pack(fill="x")
-
-        self._button = ctk.CTkButton(
-            row, text="اختر ملف", width=90, command=self._browse
-        )
-        self._button.pack(side="right", padx=(theme.PAD_S, 0))
-
-        self._display = ctk.CTkEntry(row, placeholder_text="لم يتم اختيار ملف")
-        self._display.pack(side="right", fill="x", expand=True)
-        self._display.configure(state="disabled")
+        row.grid(row=2, column=0, sticky="ew", padx=theme.PAD_M, pady=(0, theme.PAD_M))
+        row.grid_columnconfigure(0, weight=1)
+        self._display = ctk.CTkEntry(row, state="disabled", font=theme.FONT_DATA)
+        self._display.grid(row=0, column=0, sticky="ew")
+        self._button = ctk.CTkButton(row, text="اختيار ملف", width=112, command=self._browse)
+        self._button.grid(row=0, column=1, padx=(theme.PAD_S, 0))
 
     def _browse(self) -> None:
-        if self._save_mode:
-            selected = filedialog.asksaveasfilename(
-                defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")]
-            )
-        else:
-            selected = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
-
+        selected = self._select_path()
         if not selected:
             return
-
         self.set_path(Path(selected))
-        if self._on_selected:
+        if self._on_selected and self._path:
             self._on_selected(self._path)
+
+    def _select_path(self) -> str:
+        if self._save_mode:
+            return filedialog.asksaveasfilename(
+                defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")]
+            )
+        return filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
 
     def set_path(self, path: Path) -> None:
         self._path = path
