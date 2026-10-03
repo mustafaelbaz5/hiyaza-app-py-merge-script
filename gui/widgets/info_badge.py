@@ -15,9 +15,15 @@ class InfoBadge(ctk.CTkFrame):
         )
         self.grid_columnconfigure(0, weight=1)
         self._title = ctk.CTkLabel(self, font=theme.FONT_HEADING, anchor="e")
-        self._title.grid(row=0, column=0, sticky="ew", padx=theme.PAD_M, pady=(theme.PAD_M, 4))
-        self._details = ctk.CTkLabel(self, font=theme.FONT_BODY, anchor="e", justify="right")
-        self._details.grid(row=1, column=0, sticky="ew", padx=theme.PAD_M, pady=(0, theme.PAD_M))
+        self._title.grid(
+            row=0, column=0, sticky="ew", padx=theme.PAD_M, pady=(theme.PAD_M, 4)
+        )
+        self._details = ctk.CTkLabel(
+            self, font=theme.FONT_BODY, anchor="e", justify="right"
+        )
+        self._details.grid(
+            row=1, column=0, sticky="ew", padx=theme.PAD_M, pady=(0, theme.PAD_M)
+        )
         self.show_empty()
 
     def show_empty(self) -> None:
@@ -28,7 +34,9 @@ class InfoBadge(ctk.CTkFrame):
         )
 
     def show_detected(self, info: dict) -> None:
-        type_label = "ائتمان زراعي" if info["association_type"] == "credit" else "إصلاح زراعي"
+        type_label = (
+            "ائتمان زراعي" if info["association_type"] == "credit" else "إصلاح زراعي"
+        )
         self._title.configure(text="تم التعرف على الجمعية", text_color=theme.SUCCESS)
         self._details.configure(
             text=(

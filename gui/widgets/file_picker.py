@@ -34,7 +34,11 @@ class FilePicker(ctk.CTkFrame):
             row=0, column=0, sticky="ew", padx=theme.PAD_M, pady=(theme.PAD_M, 0)
         )
         ctk.CTkLabel(
-            self, text=hint_text, font=theme.FONT_SMALL, text_color=theme.NEUTRAL_500, anchor="e"
+            self,
+            text=hint_text,
+            font=theme.FONT_SMALL,
+            text_color=theme.NEUTRAL_500,
+            anchor="e",
         ).grid(row=1, column=0, sticky="ew", padx=theme.PAD_M, pady=(2, theme.PAD_S))
 
         row = ctk.CTkFrame(self, fg_color="transparent")
@@ -42,7 +46,9 @@ class FilePicker(ctk.CTkFrame):
         row.grid_columnconfigure(0, weight=1)
         self._display = ctk.CTkEntry(row, state="disabled", font=theme.FONT_DATA)
         self._display.grid(row=0, column=0, sticky="ew")
-        self._button = ctk.CTkButton(row, text="اختيار ملف", width=112, command=self._browse)
+        self._button = ctk.CTkButton(
+            row, text="اختيار ملف", width=112, command=self._browse
+        )
         self._button.grid(row=0, column=1, padx=(theme.PAD_S, 0))
 
     def _browse(self) -> None:

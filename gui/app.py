@@ -39,7 +39,11 @@ class App(ctk.CTk):
         self._result_page.grid(row=0, column=0, sticky="nsew")
 
     def _handle_start(
-        self, registered_path: Path, approved_path: Path, output_path: Path, detected_info: dict
+        self,
+        registered_path: Path,
+        approved_path: Path,
+        output_path: Path,
+        detected_info: dict,
     ) -> None:
         self._show_result()
         self._result_page.reset()
@@ -72,7 +76,9 @@ class App(ctk.CTk):
 
     def _save_manual_ids(self, updates: dict[int, str]) -> None:
         if not self._merge_result or not self._output_path:
-            self._result_page.show_message("تعذر العثور على نتيجة الدمج للحفظ.", theme.ERROR)
+            self._result_page.show_message(
+                "تعذر العثور على نتيجة الدمج للحفظ.", theme.ERROR
+            )
             return
         self._result_page.set_saving(True)
         self._runner.save_manual_ids_async(
@@ -82,12 +88,18 @@ class App(ctk.CTk):
             on_done=self._on_manual_save_done,
         )
 
-    def _on_manual_save_done(self, summary: dict | None, error: Exception | None) -> None:
+    def _on_manual_save_done(
+        self, summary: dict | None, error: Exception | None
+    ) -> None:
         self.after(0, self._apply_manual_save_done, summary, error)
 
-    def _apply_manual_save_done(self, summary: dict | None, error: Exception | None) -> None:
+    def _apply_manual_save_done(
+        self, summary: dict | None, error: Exception | None
+    ) -> None:
         if error:
             self._result_page.show_message(str(error), theme.ERROR)
             self._result_page.set_saving(False)
             return
-        self._result_page.refresh_review_table(self._merge_result.parcels, summary["applied"])
+        self._result_page.refresh_review_table(
+            self._merge_result.parcels, summary["applied"]
+        )
