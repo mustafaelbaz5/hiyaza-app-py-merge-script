@@ -10,6 +10,7 @@ import customtkinter as ctk
 
 from gui import theme
 from gui.widgets.progress_bar import LabeledProgressBar
+from gui.widgets.basin_review_table import BasinReviewTable
 from gui.widgets.review_table import ReviewTable
 
 
@@ -17,7 +18,7 @@ class ResultPage(ctk.CTkScrollableFrame):
     def __init__(self, master, on_new_merge: Callable[[], None], **kwargs) -> None:
         super().__init__(master, fg_color=theme.SURFACE_MUTED, **kwargs)
         self._on_new_merge = on_new_merge
-        self._on_save_manual_ids: Callable[[dict, str], None] | None = None
+        self._on_save_manual_ids: Callable[[dict, dict], None] | None = None
         self._output_path: Path | None = None
         self.grid_columnconfigure(0, weight=1)
         self._build_layout()
@@ -34,6 +35,7 @@ class ResultPage(ctk.CTkScrollableFrame):
         self._summary.grid(row=3, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_S)
         self._build_log()
         self._review = ReviewTable(self, on_status=self.show_message)
+        self._basin_review = BasinReviewTable(self, on_status=self.show_message)
         self._build_actions()
 
     def _build_log(self) -> None:
@@ -46,9 +48,9 @@ class ResultPage(ctk.CTkScrollableFrame):
 
     def _build_actions(self) -> None:
         actions = ctk.CTkFrame(self, fg_color="transparent")
-        actions.grid(row=7, column=0, sticky="ew", padx=theme.PAD_L, pady=(theme.PAD_M, theme.PAD_XL))
+        actions.grid(row=9, column=0, sticky="ew", padx=theme.PAD_L, pady=(theme.PAD_M, theme.PAD_XL))
         actions.grid_columnconfigure(0, weight=1)
-        self._save = ctk.CTkButton(actions, text="حفظ الأرقام القومية المدخلة", command=self._save_manual_ids, state="disabled")
+        self._save = ctk.CTkButton(actions, text="حفظ التصحيحات المدخلة", command=self._save_manual_ids, state="disabled")
         self._save.grid(row=0, column=0, sticky="ew")
         buttons = ctk.CTkFrame(actions, fg_color="transparent")
         buttons.grid(row=1, column=0, sticky="e", pady=(theme.PAD_S, 0))
@@ -62,7 +64,9 @@ class ResultPage(ctk.CTkScrollableFrame):
         self._output_path = None
         self._on_save_manual_ids = None
         self._review.clear()
+        self._basin_review.clear()
         self._review.grid_forget()
+        self._basin_review.grid_forget()
         self._log.grid_forget()
         self._log_toggle.configure(text="إظهار سجل العمليات")
         self._open.configure(state="disabled")
@@ -80,25 +84,33 @@ class ResultPage(ctk.CTkScrollableFrame):
         self._log.see("end")
         self._log.configure(state="disabled")
 
-    def show_success(self, summary: dict, on_save_manual_ids: Callable[[dict, str], None]) -> None:
+    def show_success(self, summary: dict, on_save_manual_ids: Callable[[dict, dict], None]) -> None:
         self._output_path = summary["output_path"]
         self._on_save_manual_ids = on_save_manual_ids
         parcels = summary["result"].parcels
         self._summary.configure(text=self._summary_text(summary, parcels))
         self._review.set_parcels(parcels)
+        self._basin_review.set_data(parcels, summary["result"].basins)
         if self._review.has_items:
             self._review.grid(row=5, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_M)
+        if self._basin_review.has_items:
+            self._basin_review.grid(row=6, column=0, sticky="ew", padx=theme.PAD_L, pady=theme.PAD_M)
+        if self._review.has_items or self._basin_review.has_items:
             self._save.configure(state="normal")
         self.show_message("اكتمل الدمج. راجع الحالات اليدوية إن وُجدت ثم احفظ.", theme.SUCCESS)
         self._open.configure(state="normal")
 
-    def refresh_review_table(self, parcels, applied: int, people_saved: int) -> None:
+    def refresh_review_table(self, parcels, basins, applied: int, people_saved: int, basins_applied: int) -> None:
         self._review.set_parcels(parcels)
-        self._save.configure(state="normal" if self._review.has_items else "disabled")
+        self._basin_review.set_data(parcels, basins)
+        has_reviews = self._review.has_items or self._basin_review.has_items
+        self._save.configure(state="normal" if has_reviews else "disabled")
         if not self._review.has_items:
             self._review.grid_forget()
+        if not self._basin_review.has_items:
+            self._basin_review.grid_forget()
         self.show_message(
-            f"تم حفظ أرقام {people_saved} شخص وتحديث {applied} قطعة. المتبقي للمراجعة: {self._review.count}.",
+            f"تم تحديث {applied} قطعة لأرقام {people_saved} شخص و{basins_applied} قطعة لأحواض مختارة.",
             theme.SUCCESS,
         )
 
@@ -112,24 +124,25 @@ class ResultPage(ctk.CTkScrollableFrame):
 
     def _save_manual_ids(self) -> None:
         updates, error = self._review.valid_updates()
+        basin_updates = self._basin_review.valid_updates()
         if error:
             self.show_message(error, theme.ERROR)
-        elif updates and self._on_save_manual_ids:
-            self._on_save_manual_ids(updates)
+        elif (updates or basin_updates) and self._on_save_manual_ids:
+            self._on_save_manual_ids(updates, basin_updates)
         else:
             self.show_message("أدخل رقمًا قوميًّا واحدًا على الأقل للحفظ.", theme.WARNING)
 
     def _summary_text(self, summary: dict, parcels) -> str:
         total = summary["parcel_count"]
         rate = ((total - summary["unmatched_count"]) / total * 100) if total else 0
-        return f"إجمالي القطع: {total}  |  الأحواض: {summary['basin_count']}\nنسبة الربط: {rate:.0f}%  |  تحتاج مراجعة: {self._review.count_for(parcels)}"
+        return f"إجمالي القطع: {total}  |  الأحواض الرسمية: {summary['basin_count']}\nنسبة ربط الحائزين: {rate:.0f}%  |  مراجعة الأرقام: {self._review.count_for(parcels)}  |  مراجعة الأحواض: {self._basin_review.count}"
 
     def _toggle_log(self) -> None:
         if self._log.winfo_ismapped():
             self._log.grid_forget()
             self._log_toggle.configure(text="إظهار سجل العمليات")
         else:
-            self._log.grid(row=6, column=0, sticky="ew", padx=theme.PAD_L, pady=(0, theme.PAD_S))
+            self._log.grid(row=8, column=0, sticky="ew", padx=theme.PAD_L, pady=(0, theme.PAD_S))
             self._log_toggle.configure(text="إخفاء سجل العمليات")
 
     def _replace_log(self, text: str) -> None:

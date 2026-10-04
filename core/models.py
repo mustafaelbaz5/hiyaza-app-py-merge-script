@@ -61,6 +61,10 @@ class Parcel:
     review_reason: str = ""
     suggested_national_id: str = ""
     suggested_holder_name: str = ""
+    # Basin names are never normalized. The raw source value remains available
+    # for audit and for applying one manual decision to every matching parcel.
+    raw_basin_name: str = ""
+    basin_review_reason: str = ""
 
 
 @dataclass

@@ -9,7 +9,7 @@ import pandas as pd
 
 from core.area import calculate_m2
 from core.codes import CodesDB
-from core.models import AssociationInfo, MergeResult, Parcel
+from core.models import AssociationInfo, BasinInfo, MergeResult, Parcel
 from core.parser import normalize_holder_name
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,13 @@ class ManualReviewPerson:
     reason: str
     suggested_national_id: str = ""
     suggested_holder_name: str = ""
+
+
+@dataclass(frozen=True)
+class ManualReviewBasin:
+    raw_name: str
+    parcel_indexes: tuple[int, ...]
+    reason: str
 
 
 def is_valid_national_id(value: str) -> bool:
@@ -84,6 +91,38 @@ def build_manual_review_people(parcels: list[Parcel]) -> list[ManualReviewPerson
             )
         )
     return people
+
+
+def build_manual_review_basins(parcels: list[Parcel]) -> list[ManualReviewBasin]:
+    """Group every unresolved raw basin name into one manual-review item."""
+    grouped: dict[str, list[tuple[int, Parcel]]] = defaultdict(list)
+    for index, parcel in enumerate(parcels):
+        if parcel.basin_code == "غير محدد":
+            grouped[parcel.raw_basin_name or parcel.basin_name].append((index, parcel))
+    return [
+        ManualReviewBasin(
+            raw_name=raw_name,
+            parcel_indexes=tuple(index for index, _ in entries),
+            reason=entries[0][1].basin_review_reason or "الحوض يحتاج اختيارًا يدويًا.",
+        )
+        for raw_name, entries in grouped.items()
+    ]
+
+
+def apply_manual_basin_codes(
+    result: MergeResult, updates: Mapping[str, BasinInfo]
+) -> int:
+    """Apply an approved official basin/code pair to all matching raw names."""
+    applied = 0
+    for parcel in result.parcels:
+        raw_name = parcel.raw_basin_name or parcel.basin_name
+        basin = updates.get(raw_name)
+        if basin and parcel.basin_code == "غير محدد":
+            parcel.basin_name = basin.name
+            parcel.basin_code = basin.code
+            parcel.basin_review_reason = ""
+            applied += 1
+    return applied
 
 
 def apply_manual_national_ids(
@@ -206,7 +245,7 @@ def merge(
                 )
         elif person_fields["national_id"] == UNKNOWN_NATIONAL_ID:
             review_reason = "تعارض في الأرقام القومية لنفس الحيازة والاسم في ملف المعتمد."
-        basin_code = codes_db.find_basin_code(
+        basin, basin_review_reason = codes_db.resolve_basin(
             row.basin_name, association_info.code, association_info.type
         )
 
@@ -217,8 +256,8 @@ def merge(
                 association_name=association_info.name,
                 association_type=association_info.type.value,
                 association_code=association_info.code,
-                basin_name=row.basin_name,
-                basin_code=basin_code,
+                basin_name=basin.name if basin else row.basin_name,
+                basin_code=basin.code if basin else "غير محدد",
                 holding_number=row.holding_number,
                 unified_holding_id=person_fields["unified_holding_id"],
                 registry_page=row.registry_page,
@@ -239,6 +278,8 @@ def merge(
                 review_reason=review_reason,
                 suggested_national_id=suggested_national_id,
                 suggested_holder_name=suggested_holder_name,
+                raw_basin_name=row.basin_name,
+                basin_review_reason=basin_review_reason,
             )
         )
 

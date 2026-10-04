@@ -101,13 +101,13 @@ def test_empty_holding_rows_removed(tmp_path):
     assert len(df) == 1
 
 
-def test_basin_typo_corrected(tmp_path):
+def test_basin_name_is_preserved_exactly(tmp_path):
     rows = [("48", "شخص", "داير الناصيه**")]
     path = tmp_path / "registered.xlsx"
     _write_registered(path, rows)
 
     df = parse_registered(path)
-    assert df.iloc[0]["basin_name"] == "داير الناحيه"
+    assert df.iloc[0]["basin_name"] == "داير الناصيه**"
 
 
 def test_parse_approved_basic(tmp_path):

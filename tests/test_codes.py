@@ -23,7 +23,13 @@ def test_missing_association_returns_none(codes_files):
     assert db.find_association("جمعية غير موجودة", AssociationType.CREDIT) is None
 
 
-def test_basin_typo_correction(codes_files):
+def test_basin_name_is_not_cleaned_or_fuzzy_matched(codes_files):
+    db = CodesDB(*codes_files)
+    code = db.find_basin_code("داير الناصيه", "323925", AssociationType.CREDIT)
+    assert code == "غير محدد"
+
+
+def test_basin_exact_name_returns_its_unique_code(codes_files):
     db = CodesDB(*codes_files)
     code = db.find_basin_code("داير الناصيه**", "323925", AssociationType.CREDIT)
     assert code == "06323000003239000012"

@@ -53,15 +53,23 @@ def _group_by_basin_ordered(result: MergeResult) -> dict[str, list[Parcel]]:
     group's parcels by holding number, per the required export order."""
     grouped: dict[str, list[Parcel]] = {}
     for parcel in result.parcels:
-        grouped.setdefault(parcel.basin_name, []).append(parcel)
+        # A code is the basin identity. Unresolved raw names stay separated so
+        # similarly named unknown basins can never be silently merged.
+        key = parcel.basin_code if parcel.basin_code != "غير محدد" else f"?{parcel.raw_basin_name}"
+        grouped.setdefault(key, []).append(parcel)
 
-    basin_order = [b.name for b in result.basins if b.name in grouped]
-    remaining = [name for name in grouped if name not in basin_order]
-    ordered_names = basin_order + remaining
+    basin_order = [b.code for b in result.basins if b.code in grouped]
+    remaining = [key for key in grouped if key not in basin_order]
+    ordered_keys = basin_order + remaining
 
-    return {
-        name: sorted(grouped[name], key=_holding_sort_key) for name in ordered_names
-    }
+    ordered: dict[str, list[Parcel]] = {}
+    for key in ordered_keys:
+        parcels = sorted(grouped[key], key=_holding_sort_key)
+        name = parcels[0].basin_name
+        # A duplicate official name with a different code must remain distinct.
+        label = name if name not in ordered else f"{name} — {parcels[0].basin_code}"
+        ordered[label] = parcels
+    return ordered
 
 
 def _sheet_safe_name(name: str) -> str:

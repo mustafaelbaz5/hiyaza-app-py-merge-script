@@ -22,15 +22,9 @@ _COL_ADMIN_NAME = 22
 _COL_DIRECTORATE_CODE = 23
 _COL_DIRECTORATE_NAME = 24
 
-_TYPO_CORRECTIONS = {
-    "داير الناصيه": "داير الناحيه",
-}
-
-
 def _normalize_basin_name(name: str) -> str:
-    """Strips whitespace/asterisks and applies known typo corrections."""
-    cleaned = str(name).strip().rstrip("*").strip()
-    return _TYPO_CORRECTIONS.get(cleaned, cleaned)
+    """Keep basin names exact; similar names can belong to different codes."""
+    return str(name) if name is not None else ""
 
 
 def _normalize_name(name: str) -> str:
@@ -119,22 +113,25 @@ class CodesDB:
         rows = rows.drop_duplicates(subset=["basin_code"]).sort_values("basin_code")
         return [BasinInfo(name=r.basin_name, code=r.basin_code) for r in rows.itertuples()]
 
-    def find_basin_code(
+    def resolve_basin(
         self, basin_name: str, assoc_code: str, assoc_type: AssociationType
-    ) -> str:
+    ) -> tuple[BasinInfo | None, str]:
+        """Resolve only one exact basin-name/code pair, never a partial match."""
         table = self._table(assoc_type)
         target = _normalize_basin_name(basin_name)
         rows = table[table["assoc_code"] == str(assoc_code)]
-
-        exact = rows[rows["basin_name"] == target]
-        if not exact.empty:
-            return exact.iloc[0]["basin_code"]
-
-        partial = rows[
-            rows["basin_name"].apply(lambda c: target in c or c in target)
-        ]
-        if not partial.empty:
-            return partial.iloc[0]["basin_code"]
-
+        exact = rows[rows["basin_name"] == target].drop_duplicates("basin_code")
+        if len(exact) == 1:
+            match = exact.iloc[0]
+            return BasinInfo(name=match["basin_name"], code=match["basin_code"]), ""
+        if len(exact) > 1:
+            return None, "الاسم مطابق لأكثر من كود حوض؛ اختر الكود يدويًا."
         logger.warning("Basin code not found: %s (assoc %s)", basin_name, assoc_code)
-        return "غير محدد"
+        return None, "اسم الحوض غير مطابق حرفيًا لأي حوض في ملف الأكواد."
+
+    def find_basin_code(
+        self, basin_name: str, assoc_code: str, assoc_type: AssociationType
+    ) -> str:
+        """Compatibility helper for callers that only need a resolved code."""
+        basin, _reason = self.resolve_basin(basin_name, assoc_code, assoc_type)
+        return basin.code if basin else "غير محدد"

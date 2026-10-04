@@ -74,7 +74,7 @@ class App(ctk.CTk):
         self._output_path = summary["output_path"]
         self._result_page.show_success(summary, self._save_manual_ids)
 
-    def _save_manual_ids(self, updates: dict) -> None:
+    def _save_manual_ids(self, updates: dict, basin_updates: dict) -> None:
         
         if not self._merge_result or not self._output_path:
             self._result_page.show_message(
@@ -86,6 +86,7 @@ class App(ctk.CTk):
             self._merge_result,
             self._output_path,
             updates,
+            basin_updates,
             on_done=self._on_manual_save_done,
         )
 
@@ -102,5 +103,5 @@ class App(ctk.CTk):
             self._result_page.set_saving(False)
             return
         self._result_page.refresh_review_table(
-            self._merge_result.parcels, summary["applied"], summary["people_saved"]
+            self._merge_result.parcels, self._merge_result.basins, summary["applied"], summary["people_saved"], summary["basins_applied"]
         )

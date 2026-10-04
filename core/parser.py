@@ -32,10 +32,6 @@ _REGISTERED_COLUMNS = {
 
 _SUMMARY_ROW_BASIN_THRESHOLD = 13
 
-_TYPO_CORRECTIONS = {
-    "داير الناصيه": "داير الناحيه",
-}
-
 # Approved file: data starts row 18 (1-based) = index 17 (0-based).
 _APPROVED_DATA_START_ROW = 18
 _APPROVED_COLUMNS = {
@@ -65,8 +61,8 @@ def normalize_holding(value) -> str:
 
 
 def _normalize_basin_name(name) -> str:
-    cleaned = str(name).strip().rstrip("*").strip() if name is not None else ""
-    return _TYPO_CORRECTIONS.get(cleaned, cleaned)
+    """Keep the basin text exactly as it appears in the source workbook."""
+    return str(name) if name is not None else ""
 
 
 def _clean(value) -> str:

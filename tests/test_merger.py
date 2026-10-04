@@ -5,6 +5,8 @@ from core.codes import CodesDB
 from core.merger import (
     UNKNOWN_NATIONAL_ID,
     apply_manual_national_ids,
+    apply_manual_basin_codes,
+    build_manual_review_basins,
     build_manual_review_people,
     is_valid_national_id,
     merge,
@@ -276,6 +278,28 @@ def test_leading_zero_holding_is_not_the_same_holding(codes_files):
     result = merge(registered, approved, db, info)
     assert result.parcels[0].holding_number == "0048"
     assert result.parcels[0].national_id == UNKNOWN_NATIONAL_ID
+
+
+def test_unmatched_basin_stays_unresolved_until_manually_selected(codes_files):
+    info = _make_association_info(codes_files)
+    db = CodesDB(*codes_files)
+    registered = _registered_df(
+        [
+            {"holding_number": "1", "holder_name": "شخص", "basin_name": "داير الناصيه"},
+            {"holding_number": "2", "holder_name": "شخص", "basin_name": "داير الناصيه"},
+        ]
+    )
+    result = merge(registered, _approved_df([]), db, info)
+
+    reviews = build_manual_review_basins(result.parcels)
+    assert len(reviews) == 1
+    assert len(reviews[0].parcel_indexes) == 2
+    assert result.parcels[0].basin_code == "غير محدد"
+
+    official = next(basin for basin in result.basins if basin.name == "داير الناصيه**")
+    applied = apply_manual_basin_codes(result, {"داير الناصيه": official})
+    assert applied == 2
+    assert {parcel.basin_code for parcel in result.parcels} == {official.code}
 
 
 @pytest.mark.parametrize(

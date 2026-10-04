@@ -7,7 +7,8 @@ from pathlib import Path
 from core.codes import CodesDB
 from core.exceptions import MergerError
 from core.exporter import export
-from core.merger import PersonKey, apply_manual_national_ids, merge
+from core.merger import PersonKey, apply_manual_basin_codes, apply_manual_national_ids, merge
+from core.models import BasinInfo
 from core.models import AssociationType, MergeResult
 from core.parser import parse_approved, parse_registered
 
@@ -39,11 +40,12 @@ class MergeRunner:
         result: MergeResult,
         output_path: Path,
         updates: dict[PersonKey, str],
+        basin_updates: dict[str, BasinInfo],
         on_done: Callable[[dict | None, Exception | None], None],
     ) -> None:
         thread = threading.Thread(
             target=self._save_manual_ids,
-            args=(result, output_path, updates, on_done),
+            args=(result, output_path, updates, basin_updates, on_done),
             daemon=True,
         )
         thread.start()
@@ -102,14 +104,16 @@ class MergeRunner:
         result: MergeResult,
         output_path: Path,
         updates: dict[PersonKey, str],
+        basin_updates: dict[str, BasinInfo],
         on_done: Callable[[dict | None, Exception | None], None],
     ) -> None:
         try:
             applied = apply_manual_national_ids(result, updates)
+            basins_applied = apply_manual_basin_codes(result, basin_updates)
             export(result, output_path)
             remaining = sum(
                 parcel.national_id == "11111111111111" for parcel in result.parcels
             )
-            on_done({"applied": applied, "people_saved": len(updates), "remaining": remaining}, None)
+            on_done({"applied": applied, "people_saved": len(updates), "basins_applied": basins_applied, "remaining": remaining}, None)
         except (MergerError, OSError, ValueError) as error:
             on_done(None, MergerError(f"تعذر حفظ التصحيحات اليدوية: {error}"))
