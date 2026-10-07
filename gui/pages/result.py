@@ -100,7 +100,7 @@ class ResultPage(ctk.CTkScrollableFrame):
         self.show_message("اكتمل الدمج. راجع الحالات اليدوية إن وُجدت ثم احفظ.", theme.SUCCESS)
         self._open.configure(state="normal")
 
-    def refresh_review_table(self, parcels, basins, applied: int, people_saved: int, basins_applied: int) -> None:
+    def refresh_review_table(self, parcels, basins, applied: int, people_saved: int, basins_applied: int, duplicates_removed: int) -> None:
         self._review.set_parcels(parcels)
         self._basin_review.set_data(parcels, basins)
         has_reviews = self._review.has_items or self._basin_review.has_items
@@ -109,10 +109,10 @@ class ResultPage(ctk.CTkScrollableFrame):
             self._review.grid_forget()
         if not self._basin_review.has_items:
             self._basin_review.grid_forget()
-        self.show_message(
-            f"تم تحديث {applied} قطعة لأرقام {people_saved} شخص و{basins_applied} قطعة لأحواض مختارة.",
-            theme.SUCCESS,
-        )
+        message = f"تم تحديث {applied} قطعة لأرقام {people_saved} شخص و{basins_applied} قطعة لأحواض مختارة."
+        if duplicates_removed:
+            message += f" أزيلت {duplicates_removed} قطعة مكررة متطابقة تمامًا."
+        self.show_message(message, theme.SUCCESS)
 
     def show_message(self, message: str, color: str) -> None:
         self._message.configure(text=message, text_color=color)
@@ -135,7 +135,8 @@ class ResultPage(ctk.CTkScrollableFrame):
     def _summary_text(self, summary: dict, parcels) -> str:
         total = summary["parcel_count"]
         rate = ((total - summary["unmatched_count"]) / total * 100) if total else 0
-        return f"إجمالي القطع: {total}  |  الأحواض الرسمية: {summary['basin_count']}\nنسبة ربط الحائزين: {rate:.0f}%  |  مراجعة الأرقام: {self._review.count_for(parcels)}  |  مراجعة الأحواض: {self._basin_review.count}"
+        duplicate_note = f"  |  مكررات أزيلت: {summary['duplicates_removed']}" if summary['duplicates_removed'] else ""
+        return f"إجمالي القطع: {total}  |  الأحواض الرسمية: {summary['basin_count']}{duplicate_note}\nنسبة ربط الحائزين: {rate:.0f}%  |  مراجعة الأرقام: {self._review.count_for(parcels)}  |  مراجعة الأحواض: {self._basin_review.count}"
 
     def _toggle_log(self) -> None:
         if self._log.winfo_ismapped():

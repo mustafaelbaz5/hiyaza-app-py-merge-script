@@ -82,7 +82,7 @@ class MergeRunner:
             result = merge(registered, approved, self._codes_db, association_info)
 
             on_progress(0.85, "جاري كتابة ملف Excel...")
-            export(result, output_path)
+            removed_duplicates = export(result, output_path)
 
             on_progress(1.0, "تم الانتهاء بنجاح")
             summary = {
@@ -92,6 +92,7 @@ class MergeRunner:
                 "basin_count": len(result.basins),
                 "unmatched_count": result.unmatched_count,
                 "warnings": result.warnings,
+                "duplicates_removed": removed_duplicates,
             }
             on_done(summary, None)
         except MergerError as e:
@@ -110,10 +111,10 @@ class MergeRunner:
         try:
             applied = apply_manual_national_ids(result, updates)
             basins_applied = apply_manual_basin_codes(result, basin_updates)
-            export(result, output_path)
+            removed_duplicates = export(result, output_path)
             remaining = sum(
                 parcel.national_id == "11111111111111" for parcel in result.parcels
             )
-            on_done({"applied": applied, "people_saved": len(updates), "basins_applied": basins_applied, "remaining": remaining}, None)
+            on_done({"applied": applied, "people_saved": len(updates), "basins_applied": basins_applied, "remaining": remaining, "duplicates_removed": removed_duplicates}, None)
         except (MergerError, OSError, ValueError) as error:
             on_done(None, MergerError(f"تعذر حفظ التصحيحات اليدوية: {error}"))

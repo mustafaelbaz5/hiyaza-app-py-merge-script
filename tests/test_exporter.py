@@ -98,3 +98,27 @@ def test_manual_national_id_is_written_without_changing_other_parcels(tmp_path):
     ws = openpyxl.load_workbook(output_path)[ALL_PARCELS_SHEET_NAME]
     assert ws.cell(row=3, column=11).value == "29510251202211"
     assert ws.cell(row=4, column=11).value == "12345678901234"
+
+
+def test_export_removes_only_rows_identical_in_every_exported_field(tmp_path):
+    result = _make_result()
+    duplicate = _make_parcel("1", "احمد محمد", "الدماسه", feddan=1.0)
+    result.parcels.append(duplicate)
+
+    removed = export(result, tmp_path / "output.xlsx")
+
+    assert removed == 1
+    assert result.duplicates_removed == 1
+    assert len(result.parcels) == 2
+
+
+def test_export_keeps_rows_when_one_exported_field_differs(tmp_path):
+    result = _make_result()
+    similar = _make_parcel("1", "احمد محمد", "الدماسه", feddan=1.0)
+    similar.border_east = "حد مختلف"
+    result.parcels.append(similar)
+
+    removed = export(result, tmp_path / "output.xlsx")
+
+    assert removed == 0
+    assert len(result.parcels) == 3

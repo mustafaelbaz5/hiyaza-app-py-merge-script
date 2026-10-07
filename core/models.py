@@ -74,3 +74,4 @@ class MergeResult:
     basins: list[BasinInfo]
     unmatched_count: int
     warnings: list[str] = field(default_factory=list)
+    duplicates_removed: int = 0

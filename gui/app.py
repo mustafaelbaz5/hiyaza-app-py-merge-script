@@ -103,5 +103,10 @@ class App(ctk.CTk):
             self._result_page.set_saving(False)
             return
         self._result_page.refresh_review_table(
-            self._merge_result.parcels, self._merge_result.basins, summary["applied"], summary["people_saved"], summary["basins_applied"]
+            self._merge_result.parcels,
+            self._merge_result.basins,
+            summary["applied"],
+            summary["people_saved"],
+            summary["basins_applied"],
+            summary["duplicates_removed"],
         )

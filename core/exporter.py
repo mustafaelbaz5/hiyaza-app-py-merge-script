@@ -19,8 +19,9 @@ SUMMARY_SHEET_NAME = "ملخص الأحواض"
 _MAX_SHEET_NAME_LEN = 31
 
 
-def export(result: MergeResult, output_path: Path) -> None:
+def export(result: MergeResult, output_path: Path) -> int:
     try:
+        removed_duplicates = _remove_exact_duplicate_parcels(result)
         parcels_by_basin = _group_by_basin_ordered(result)
         wb = Workbook()
         wb.remove(wb.active)
@@ -34,11 +35,31 @@ def export(result: MergeResult, output_path: Path) -> None:
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         wb.save(output_path)
+        return removed_duplicates
     except MergerError:
         raise
     except Exception as e:
         logger.exception("Unexpected error writing Excel output")
         raise MergerError("حدث خطأ غير متوقع أثناء كتابة ملف Excel") from e
+
+
+def _remove_exact_duplicate_parcels(result: MergeResult) -> int:
+    """Keep the first parcel only when every exported cell is identical."""
+    unique: list[Parcel] = []
+    seen: set[tuple] = set()
+    for parcel in result.parcels:
+        key = tuple(sheet.parcel_value(parcel, field) for field, _label, _group in styles.COLUMNS)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(parcel)
+
+    removed = len(result.parcels) - len(unique)
+    if removed:
+        result.parcels = unique
+        result.duplicates_removed += removed
+        logger.info("Removed %d exactly duplicated parcel rows", removed)
+    return removed
 
 
 def _holding_sort_key(parcel: Parcel) -> int:
